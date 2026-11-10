@@ -70,8 +70,6 @@ class PlaylistsNotifier extends StateNotifier<List<Playlist>> {
         final List<dynamic> decoded = jsonDecode(jsonStr);
         var list = decoded.map((item) => Playlist.fromMap(item)).toList();
         state = list;
-
-        // Migración: portadas viejas en caché -> almacenamiento permanente
         var changed = false;
         final migrated = <Playlist>[];
         for (final p in list) {

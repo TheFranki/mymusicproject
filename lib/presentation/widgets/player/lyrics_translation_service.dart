@@ -10,7 +10,7 @@ class LyricsTranslationService {
     //'de': 'Alemán',
     //'it': 'Italiano',
     //'ja': 'Japonés',
-    //'ko': 'Coreano',
+    'ko': 'Coreano',
     //'zh-CN': 'Chino',
   };
 

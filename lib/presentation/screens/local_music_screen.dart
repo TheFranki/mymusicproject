@@ -61,8 +61,7 @@ class LocalMusicScreen extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.grey, fontSize: 12),
                 ),
-
-                // --- 2BOTÓN DE FAVORITOS  ---
+                
                 trailing: Consumer(
                   builder: (context, ref, child) {
                     final isFav = ref

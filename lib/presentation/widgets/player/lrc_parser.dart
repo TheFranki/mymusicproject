@@ -44,7 +44,7 @@ bool hasLrcTimestamps(String s) => RegExp(r'\[\d{1,3}:\d{2}').hasMatch(s);
 
 class LrcQuality {
   const LrcQuality({required this.lines, required this.problems});
-  final int lines; // líneas con tiempo
+  final int lines;
   final List<String> problems;
 
   bool get isSynced => lines > 0;

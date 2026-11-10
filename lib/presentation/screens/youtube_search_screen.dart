@@ -237,7 +237,6 @@ class _YoutubeSearchScreenState extends ConsumerState<YoutubeSearchScreen> {
       }
     }
 
-    // PANTALLA PRINCIPAL DE BÚSQUEDA
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

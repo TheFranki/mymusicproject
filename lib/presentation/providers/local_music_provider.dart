@@ -73,7 +73,6 @@ final localSongsProvider = FutureProvider<List<Map<String, dynamic>>>((
   }
 });
 
-// --- LISTENER PARA AUTO-AVANZAR ---
 final playerStateListenerProvider = Provider<void>((ref) {
   ref.read(playerStateListenerServiceProvider);
 });

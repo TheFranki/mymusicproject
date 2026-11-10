@@ -19,7 +19,6 @@ class HomeCategoryCards extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Row(
         children: [
-          // 1. Favoritos
           Expanded(
             child: _buildCategoryCard(
               title: 'Favoritos',
@@ -29,8 +28,6 @@ class HomeCategoryCards extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 12),
-
-          // 2. Playlists
           Expanded(
             child: _buildCategoryCard(
               title: 'Playlists',
@@ -40,8 +37,6 @@ class HomeCategoryCards extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 12),
-
-          // 3. Buscar Online
           Expanded(
             child: _buildCategoryCard(
               title: 'Buscar Online',

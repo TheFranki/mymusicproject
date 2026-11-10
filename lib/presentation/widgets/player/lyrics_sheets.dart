@@ -17,7 +17,7 @@ void showManualLyricsSheet(
       child: Wrap(
         children: [
           ListTile(
-            leading: const Icon(Icons.search, color: Colors.blueAccent),
+            //leading: const Icon(Icons.search, color: Colors.blueAccent),
             title: const Text(
               'Buscar y elegir resultado',
               style: TextStyle(color: Colors.white),
@@ -32,7 +32,7 @@ void showManualLyricsSheet(
             },
           ),
           ListTile(
-            leading: const Icon(Icons.content_paste, color: Colors.blueAccent),
+            //leading: const Icon(Icons.content_paste, color: Colors.blueAccent),
             title: const Text(
               'Pegar letra',
               style: TextStyle(color: Colors.white),
@@ -65,7 +65,7 @@ void showAnchorSheet(
       child: Wrap(
         children: [
           ListTile(
-            leading: const Icon(Icons.my_location, color: Colors.blueAccent),
+            //leading: const Icon(Icons.my_location, color: Colors.blueAccent),
             title: const Text(
               'Fijar aquí de nuevo',
               style: TextStyle(color: Colors.white),
@@ -80,7 +80,7 @@ void showAnchorSheet(
             },
           ),
           ListTile(
-            leading: const Icon(Icons.location_off, color: Colors.redAccent),
+            //leading: const Icon(Icons.location_off, color: Colors.redAccent),
             title: const Text(
               'Quitar ancla',
               style: TextStyle(color: Colors.white),

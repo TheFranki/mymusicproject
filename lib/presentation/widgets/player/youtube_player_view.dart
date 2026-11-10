@@ -48,7 +48,6 @@ class _YoutubePlayerViewState extends ConsumerState<YoutubePlayerView> {
     super.dispose();
   }
 
-  // ---------------- MODO VIDEO ----------------
   void _disposeLater(VideoPlayerController? c) {
     if (c == null) return;
     c.removeListener(_onVideoTick);

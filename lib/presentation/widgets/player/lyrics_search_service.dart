@@ -303,7 +303,6 @@ class LyricsSearchService {
       score += match ? 25 : -35;
     }
 
-    // Duración
     if (durationSec != null && c.duration != null) {
       final d = (c.duration! - durationSec).abs();
       score += d <= 2

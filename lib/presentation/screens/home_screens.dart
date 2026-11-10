@@ -67,7 +67,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         final countB = playCountMap[b['id']?.toString()] ?? 0;
         final c = countB.compareTo(countA);
         return c != 0 ? c : titleA.compareTo(titleB);
-      default: // name_asc
+      default:
         return titleA.compareTo(titleB);
     }
   }
