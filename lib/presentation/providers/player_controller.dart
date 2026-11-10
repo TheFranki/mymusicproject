@@ -286,7 +286,6 @@ class PlayerController {
     }
   }
 
-  // ---------------- GUARDADO DE POSICIÓN ----------------
   void _startPositionSaver() {
     _posSub?.cancel();
     _playSub?.cancel();
@@ -329,7 +328,6 @@ class PlayerController {
     });
   }
 
-  // ---------------- RESTAURAR SESIÓN ----------------
   Future<void> restoreLastSession() async {
     if (_restored) return;
     _restored = true;
@@ -467,7 +465,6 @@ class PlayerController {
     return q.order[q.index]['id'] == currentId ? q : null;
   }
 
-  /// True si esa canción ya está cargada (sonando o en pausa) y no terminó.
   bool _isAlreadyLoaded(String id) {
     final currentId = ref.read(currentSongProvider)?['id']?.toString();
     final state = ref.read(playerServiceProvider).player.processingState;
@@ -485,7 +482,6 @@ class PlayerController {
     if (_recentYoutube.length > 15) _recentYoutube.removeAt(0);
   }
 
-  /// Reproduce un video de YouTube. Si ya es la canción actual, NO la reinicia.
   Future<void> playYoutube(Map<String, dynamic> video) async {
     final id = video['id']?.toString() ?? '';
     if (id.isEmpty) return;
@@ -508,14 +504,11 @@ class PlayerController {
       'isLocal': 'false',
       'data': '',
     };
-
-    // Un video de YouTube no pertenece a la cola local
     _setQueue(const PlaybackQueue());
     await _play(song);
     unawaited(_refreshRelated(id));
   }
 
-  // ---------- YouTube: recomendaciones ----------
   Future<void> _nextRelated() async {
     final current = ref.read(currentSongProvider);
     if (current == null || current['isLocal'] == 'true') return;

@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mymusicproject/data/sources/persistent_image.dart';
 import 'package:mymusicproject/presentation/providers/custom_artwork_provider.dart';
 import 'package:mymusicproject/presentation/providers/player_provider.dart';
+import 'package:mymusicproject/presentation/widgets/app_snack.dart';
 
 void showEditSongInfoDialog(
   BuildContext context,
@@ -74,8 +75,11 @@ void showEditSongInfoDialog(
                 controller: titleController,
                 label: 'Nombre de la canción',
               ),
-              const SizedBox(height: 14),
-              _buildTextField(controller: artistController, label: 'Artista'),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: artistController, 
+                label: 'Artista'),
+              const SizedBox(height: 4),
             ],
           ),
         ),
@@ -107,7 +111,6 @@ void showEditSongInfoDialog(
                 artist: artistController.text.trim(),
                 artworkPathOrUrl: currentArtwork,
               );
-
               await ref
                   .read(customSongMetadataProvider.notifier)
                   .saveMetadata(songId, newMeta);
@@ -243,12 +246,7 @@ void _showImageOptionsBottomSheet(
               if (url != null) {
                 onImageSelected(url);
               } else if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('No se encontró imagen.'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+                context.snack('No se encontró imagen.', color: Colors.red);
               }
             },
           ),

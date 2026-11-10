@@ -7,9 +7,9 @@ class LyricsTranslationService {
     'en': 'Inglés',
     //'pt': 'Portugués',
     //'fr': 'Francés',
-    'de': 'Alemán',
+    //'de': 'Alemán',
     //'it': 'Italiano',
-    'ja': 'Japonés',
+    //'ja': 'Japonés',
     //'ko': 'Coreano',
     //'zh-CN': 'Chino',
   };

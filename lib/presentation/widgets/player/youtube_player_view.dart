@@ -1,4 +1,3 @@
-// lib/presentation/widgets/player/youtube_player_view.dart
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -149,7 +148,6 @@ class _YoutubePlayerViewState extends ConsumerState<YoutubePlayerView> {
     await ref.read(playerControllerProvider).next(auto: true);
   }
 
-  // ---------------- CONTROLES ----------------
   Future<void> _next() async {
     if (_video != null) await _exitVideoMode(resumeAudio: false);
     await ref.read(playerControllerProvider).next();
@@ -200,7 +198,6 @@ class _YoutubePlayerViewState extends ConsumerState<YoutubePlayerView> {
     });
   }
 
-  // ---------------- BUILD ----------------
   @override
   Widget build(BuildContext context) {
     ref.listen<String?>(currentSongProvider.select((s) => s?['id']), (
@@ -237,7 +234,6 @@ class _YoutubePlayerViewState extends ConsumerState<YoutubePlayerView> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(24.0, 10, 24.0, 60.0),
             children: [
-              // ---- Carátula / video ----
               Stack(
                 children: [
                   Center(
@@ -293,8 +289,6 @@ class _YoutubePlayerViewState extends ConsumerState<YoutubePlayerView> {
                   ),
                 ],
               ),
-
-              // ---- Favorito ----
               Align(
                 alignment: Alignment.center,
                 child: Consumer(
@@ -317,7 +311,6 @@ class _YoutubePlayerViewState extends ConsumerState<YoutubePlayerView> {
                   },
                 ),
               ),
-
               const SizedBox(height: 24),
               Text(
                 title,
@@ -337,10 +330,8 @@ class _YoutubePlayerViewState extends ConsumerState<YoutubePlayerView> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 30),
-
               _YtProgressBar(video: isVideoMode ? _video : null),
               const SizedBox(height: 40),
-
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
@@ -387,11 +378,8 @@ class _YoutubePlayerViewState extends ConsumerState<YoutubePlayerView> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 20),
               const Divider(color: Colors.white24),
-
-              // ---- Recomendaciones ----
               for (final video in related)
                 ListTile(
                   key: ValueKey(video['id']),
@@ -425,18 +413,12 @@ class _YoutubePlayerViewState extends ConsumerState<YoutubePlayerView> {
     );
   }
 }
-
-// ============================================================
-// BARRA DE PROGRESO (audio o video)
-// ============================================================
 class _YtProgressBar extends ConsumerStatefulWidget {
   final VideoPlayerController? video;
   const _YtProgressBar({required this.video});
-
   @override
   ConsumerState<_YtProgressBar> createState() => _YtProgressBarState();
 }
-
 class _YtProgressBarState extends ConsumerState<_YtProgressBar> {
   double? _drag;
 
@@ -451,7 +433,6 @@ class _YtProgressBarState extends ConsumerState<_YtProgressBar> {
     final posMs = (_drag ?? position.inMilliseconds.toDouble())
         .clamp(0.0, maxMs)
         .toDouble();
-
     return Column(
       children: [
         SliderTheme(
@@ -502,7 +483,6 @@ class _YtProgressBarState extends ConsumerState<_YtProgressBar> {
             _bar(value.position, value.duration, video.seekTo),
       );
     }
-
     final position = ref.watch(positionProvider).value ?? Duration.zero;
     final duration = ref.watch(durationProvider).value ?? Duration.zero;
     return _bar(

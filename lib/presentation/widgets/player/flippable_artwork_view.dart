@@ -1,10 +1,17 @@
 import 'dart:math';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mymusicproject/presentation/widgets/song_artwork.dart';
 import 'package:mymusicproject/presentation/providers/player_provider.dart';
+import 'package:mymusicproject/presentation/widgets/app_snack.dart';
 import 'package:mymusicproject/presentation/widgets/player/lrc_parser.dart';
+import 'package:mymusicproject/presentation/widgets/player/lyrics_row.dart';
+import 'package:mymusicproject/presentation/widgets/player/lyrics_actions_mixin.dart';
+import 'package:mymusicproject/presentation/widgets/player/lyrics_menus.dart';
+import 'package:mymusicproject/presentation/widgets/player/lyrics_timing.dart';
 import 'package:mymusicproject/presentation/widgets/player/lyrics_translation_service.dart';
+import 'package:mymusicproject/presentation/widgets/song_artwork.dart';
 
 class FlippableArtworkView extends ConsumerStatefulWidget {
   final String songId;
@@ -26,28 +33,58 @@ class FlippableArtworkView extends ConsumerStatefulWidget {
 }
 
 class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
-    with SingleTickerProviderStateMixin {
+    with
+        SingleTickerProviderStateMixin,
+        LyricsActionsMixin<FlippableArtworkView> {
   static const double _lineExtent = 55.0;
 
   late final AnimationController _controller;
   late final Animation<double> _animation;
   bool _isFlipped = false;
-  bool _isSearchingLyrics = false;
   bool _needsInitialScroll = true;
-  int _offsetMs = 0;
   bool _songChanged = false;
+
+  int _offsetMs = 0;
+  Map<int, int> _anchors = const {};
+  List<int> _effectiveMs = const [];
+  bool _effectiveDirty = true;
 
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<int> _activeIndex = ValueNotifier<int>(-1);
 
   String _parsedSource = '';
   List<LyricLine> _parsedLines = const [];
+  String _script = 'auto';
 
   final LyricsTranslationService _translator = LyricsTranslationService();
   String _subMode = 'off';
   List<String> _subLines = const [];
   bool _isTranslating = false;
   final Map<int, GlobalKey> _lineKeys = {};
+
+  @override
+  String get lyricsSongId => widget.songId;
+  @override
+  String get lyricsTitle => widget.title;
+  @override
+  String get lyricsArtist => widget.artist;
+  @override
+  String get lyricsArtwork => widget.artwork;
+  @override
+  int get lyricsOffset => _offsetMs;
+  @override
+  Map<int, int> get lyricsAnchors => _anchors;
+  @override
+  int get lyricsLineCount => _parsedLines.length;
+
+  @override
+  void resetSubtitles() {
+    setState(() {
+      _subMode = 'off';
+      _subLines = const [];
+      _isTranslating = false;
+    });
+  }
 
   @override
   void initState() {
@@ -70,6 +107,9 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
       _parsedSource = '\u0000';
       _parsedLines = const [];
       _offsetMs = 0;
+      _anchors = const {};
+      _effectiveMs = const [];
+      _effectiveDirty = true;
       _subMode = 'off';
       _subLines = const [];
       _isTranslating = false;
@@ -98,6 +138,10 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
     if (raw != _parsedSource) {
       _parsedSource = raw;
       _parsedLines = raw.isEmpty ? const [] : parseLrc(raw);
+      _script = raw.isEmpty
+          ? 'auto'
+          : LyricsTranslationService.detectScript(raw);
+      _effectiveDirty = true;
       _subLines = const [];
       _lineKeys.clear();
 
@@ -131,19 +175,18 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
     return _parsedSource.split('\n');
   }
 
+  void _syncEffective() {
+    if (!_effectiveDirty && _effectiveMs.length == _parsedLines.length) return;
+    _effectiveMs = computeEffectiveTimes([
+      for (final l in _parsedLines) l.timestamp.inMilliseconds,
+    ], _anchors);
+    _effectiveDirty = false;
+  }
+
   int _indexFor(Duration pos) {
-    final adj = pos - Duration(milliseconds: _offsetMs);
-    var lo = 0, hi = _parsedLines.length - 1, ans = -1;
-    while (lo <= hi) {
-      final mid = (lo + hi) ~/ 2;
-      if (_parsedLines[mid].timestamp <= adj) {
-        ans = mid;
-        lo = mid + 1;
-      } else {
-        hi = mid - 1;
-      }
-    }
-    return ans;
+    if (_parsedLines.isEmpty) return -1;
+    _syncEffective();
+    return indexForTime(_effectiveMs, pos.inMilliseconds - _offsetMs);
   }
 
   void _updateActive(Duration pos) {
@@ -228,341 +271,49 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
         _subLines = const [];
         _isTranslating = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No se pudo traducir: $e'),
-          backgroundColor: Colors.red,
-        ),
+      showAppSnack(
+        ScaffoldMessenger.of(context),
+        'No se pudo traducir: $e',
+        color: Colors.red,
       );
     }
-  }
-
-  SongMetaData _baseMeta() =>
-      ref.read(customSongMetadataProvider)[widget.songId] ??
-      SongMetaData(
-        title: widget.title,
-        artist: widget.artist,
-        artworkPathOrUrl: widget.artwork,
-        lyrics: '',
-      );
-
-  Future<void> _changeOffset(int ms) async {
-    final clamped = ms.clamp(-60000, 60000).toInt();
-    await ref
-        .read(customSongMetadataProvider.notifier)
-        .saveMetadata(
-          widget.songId,
-          _baseMeta().copyWith(lyricsOffsetMs: clamped),
-        );
-  }
-
-  static const int _reactionMs = 250;
-  Future<void> _syncToLine(int index) async {
-    if (index < 0 || index >= _parsedLines.length) return;
-    final pos = ref.read(playerServiceProvider).player.position;
-    final newOffset =
-        (pos - _parsedLines[index].timestamp).inMilliseconds - _reactionMs;
-    final previous = _offsetMs;
-    final messenger = ScaffoldMessenger.of(context);
-
-    await _changeOffset(newOffset);
-
-    messenger.showSnackBar(
-      SnackBar(
-        content: const Text('Letra sincronizada con esta línea'),
-        action: SnackBarAction(
-          label: 'Deshacer',
-          onPressed: () => _changeOffset(previous),
-        ),
-      ),
-    );
-  }
-
-  void _showSyncDialog() {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => Consumer(
-        builder: (context, dialogRef, _) {
-          final offset = dialogRef.watch(
-            customSongMetadataProvider.select(
-              (m) => m[widget.songId]?.lyricsOffsetMs ?? 0,
-            ),
-          );
-
-          Widget btn(String label, int delta) => OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-              side: BorderSide(color: Colors.grey.shade700),
-            ),
-            onPressed: () => _changeOffset(offset + delta),
-            child: Text(label),
-          );
-
-          final sign = offset > 0 ? '+' : '';
-          return AlertDialog(
-            backgroundColor: const Color(0xFF1E1E1E),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            title: const Text(
-              'Ajustar sincronización',
-              style: TextStyle(color: Colors.white, fontSize: 16),
-              textAlign: TextAlign.center,
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Forma rápida: mantén presionando la letra con el inicio de la voz.'
-                  'Ajuste fino: si va adelantada sube el valor (+), si va atrasada bájalo (−).',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  '$sign${(offset / 1000).toStringAsFixed(1)} s',
-                  style: const TextStyle(
-                    color: Colors.blueAccent,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    btn('−5', -5000),
-                    btn('−1', -1000),
-                    btn('−0.1', -100),
-                    btn('+0.1', 100),
-                    btn('+1', 1000),
-                    btn('+5', 5000),
-                  ],
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => _changeOffset(0),
-                child: const Text(
-                  'Restablecer',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Listo'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Future<void> _deleteLyrics() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Borrar letra',
-          style: TextStyle(color: Colors.white, fontSize: 16),
-        ),
-        content: const Text(
-          'Se quitará la letra de esta canción.\n Podrás buscarla de nuevo '
-          'desde la lupa.',
-          style: TextStyle(color: Colors.white70, fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Borrar',
-              style: TextStyle(color: Colors.redAccent),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true || !mounted) return;
-
-    final previous = _baseMeta();
-    final messenger = ScaffoldMessenger.of(context);
-    final notifier = ref.read(customSongMetadataProvider.notifier);
-
-    setState(() {
-      _subMode = 'off';
-      _subLines = const [];
-      _isTranslating = false;
-    });
-    await notifier.saveMetadata(
-      widget.songId,
-      previous.copyWith(lyrics: '', lyricsOffsetMs: 0),
-    );
-
-    messenger.showSnackBar(
-      SnackBar(
-        content: const Text('Letra borrada'),
-        action: SnackBarAction(
-          label: 'Deshacer',
-          onPressed: () => notifier.saveMetadata(widget.songId, previous),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _fetchLyricsAutomatically({String? customQuery}) async {
-    setState(() => _isSearchingLyrics = true);
-
-    try {
-      final extractor = ref.read(ytExtractorProvider);
-      final durationSec = ref
-          .read(playerServiceProvider)
-          .player
-          .duration
-          ?.inSeconds;
-
-      final fetchedLyrics = await extractor.searchLyricsForSong(
-        widget.title,
-        widget.artist,
-        customQuery: customQuery,
-        durationSec: durationSec,
-      );
-
-      if (fetchedLyrics != null && fetchedLyrics.isNotEmpty) {
-        final updatedMeta = _baseMeta().copyWith(
-          lyrics: fetchedLyrics,
-          lyricsOffsetMs: 0,
-        );
-
-        await ref
-            .read(customSongMetadataProvider.notifier)
-            .saveMetadata(widget.songId, updatedMeta);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('¡Letra encontrada y sincronizada con éxito!'),
-            ),
-          );
-        }
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se encontró la letra con esa consulta'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al buscar la letra: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isSearchingLyrics = false);
-    }
-  }
-
-  void _showCustomSearchDialog() {
-    final artistText =
-        (widget.artist.trim().isEmpty ||
-            widget.artist.toLowerCase().contains('desconocido') ||
-            widget.artist.toLowerCase().contains('unknown'))
-        ? ''
-        : '${widget.artist} ';
-    final controller = TextEditingController(
-      text: '$artistText${widget.title}',
-    );
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Buscar letra por nombre',
-          style: TextStyle(color: Colors.white, fontSize: 16),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Escribir el nombre exacto:',
-              style: TextStyle(color: Colors.grey, fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'Artista y Título',
-                hintStyle: const TextStyle(color: Colors.grey),
-                enabledBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.grey.shade700),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderSide: const BorderSide(color: Colors.blueAccent),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-            onPressed: () {
-              final query = controller.text.trim();
-              Navigator.pop(dialogContext);
-              if (query.isNotEmpty) {
-                _fetchLyricsAutomatically(customQuery: query);
-              }
-            },
-            child: const Text('Buscar', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final rawLyrics = ref.watch(
-      customSongMetadataProvider.select((m) => m[widget.songId]?.lyrics ?? ''),
-    );
-    final lines = _linesFor(rawLyrics);
     final offsetMs = ref.watch(
       customSongMetadataProvider.select(
         (m) => m[widget.songId]?.lyricsOffsetMs ?? 0,
       ),
     );
+    final anchors = ref.watch(
+      customSongMetadataProvider.select(
+        (m) => m[widget.songId]?.lyricsAnchors ?? const <int, int>{},
+      ),
+    );
+
+    var timingChanged = false;
     if (offsetMs != _offsetMs) {
       _offsetMs = offsetMs;
+      timingChanged = true;
+    }
+    if (!mapEquals(anchors, _anchors)) {
+      _anchors = anchors;
+      _effectiveDirty = true;
+      timingChanged = true;
+    }
+    if (timingChanged) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         final pos = ref.read(positionProvider).value;
         if (pos != null && _parsedLines.isNotEmpty) _updateActive(pos);
       });
     }
+
+    final rawLyrics = ref.watch(
+      customSongMetadataProvider.select((m) => m[widget.songId]?.lyrics ?? ''),
+    );
+    final lines = _linesFor(rawLyrics);
 
     ref.listen(positionProvider, (_, next) {
       final pos = next.value;
@@ -620,162 +371,32 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
     );
   }
 
-  Widget _buildSearchMenu({required bool hasLyrics, required bool isSynced}) {
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.search, color: Colors.white, size: 24),
-      tooltip: 'Letra',
-      color: const Color(0xFF2A2A2A),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      onSelected: (value) {
-        switch (value) {
-          case 'auto':
-            _fetchLyricsAutomatically();
-          case 'manual':
-            _showCustomSearchDialog();
-          case 'sync':
-            _showSyncDialog();
-          case 'delete':
-            _deleteLyrics();
-        }
-      },
-      itemBuilder: (_) => [
-        const PopupMenuItem(
-          value: 'auto',
-          child: Text('Automática', style: TextStyle(color: Colors.white)),
-        ),
-        const PopupMenuItem(
-          value: 'manual',
-          child: Text('Por nombre', style: TextStyle(color: Colors.white)),
-        ),
-        if (isSynced)
-          const PopupMenuItem(
-            value: 'sync',
-            child: Text(
-              'Ajustar sincronización',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-        if (hasLyrics) ...[
-          const PopupMenuDivider(),
-          const PopupMenuItem(
-            value: 'delete',
-            child: Text('Borrar letra', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ],
-    );
-  }
-
-  PopupMenuItem<String> _subMenuItem(String value, String label) {
-    final selected = _subMode == value;
-    return PopupMenuItem<String>(
-      value: value,
-      child: Row(
-        children: [
-          Icon(
-            selected ? Icons.check : Icons.circle_outlined,
-            color: selected ? Colors.blueAccent : Colors.white24,
-            size: 16,
-          ),
-          const SizedBox(width: 10),
-          Text(
-            label,
-            style: TextStyle(
-              color: selected ? Colors.blueAccent : Colors.white,
-              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTranslateMenu() {
-    final from = LyricsTranslationService.detectScript(_parsedSource);
-    final canRomanize = from != 'auto';
-
-    return PopupMenuButton<String>(
-      icon: Icon(
-        Icons.translate,
-        color: _subMode == 'off' ? Colors.white : Colors.blueAccent,
-        size: 22,
-      ),
-      tooltip: 'Traducción / romanización',
-      color: const Color(0xFF2A2A2A),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      onSelected: _setSubMode,
-      itemBuilder: (_) => [
-        _subMenuItem('off', 'Solo original'),
-        if (canRomanize)
-          _subMenuItem('rom', LyricsTranslationService.romanizationLabel(from)),
-        const PopupMenuDivider(),
-        for (final e in LyricsTranslationService.languages.entries)
-          _subMenuItem('tr:${e.key}', e.value),
-      ],
-    );
-  }
-
-  Widget _lyricRow(
+  Widget _row(
     int index,
     String text, {
     bool isActive = false,
     double opacity = 1.0,
     bool compact = false,
-    VoidCallback? onLongPress,
+    bool synced = false,
   }) {
-    final sub = index < _subLines.length ? _subLines[index].trim() : '';
-    final showSub = _subMode != 'off' && sub.isNotEmpty && sub != text.trim();
-    final isRom = _subMode == 'rom';
+    final sub = _subMode == 'off' || index >= _subLines.length
+        ? ''
+        : _subLines[index].trim();
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onLongPress: onLongPress,
-      child: Container(
-        key: _lineKeys.putIfAbsent(index, () => GlobalKey()),
-        constraints: BoxConstraints(minHeight: compact ? 0 : _lineExtent),
-        alignment: Alignment.center,
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 250),
-          opacity: isActive ? 1.0 : opacity,
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-              vertical: compact ? 3.0 : 4.0,
-              horizontal: 8.0,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  text,
-                  style: TextStyle(
-                    color: isActive ? Colors.blueAccent : Colors.white,
-                    fontSize: isActive ? 20 : 16,
-                    fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                    height: compact ? 1.4 : 1.25,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                if (showSub)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      sub,
-                      style: TextStyle(
-                        color: isActive
-                            ? Colors.lightBlueAccent
-                            : Colors.white54,
-                        fontSize: isActive ? 15 : 13,
-                        fontStyle: isRom ? FontStyle.italic : FontStyle.normal,
-                        height: 1.25,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return LyricRow(
+      text: text,
+      sub: sub,
+      isRomanization: _subMode == 'rom',
+      isActive: isActive,
+      opacity: opacity,
+      compact: compact,
+      minHeight: _lineExtent,
+      hasAnchor: synced && _anchors.containsKey(index),
+      lineKey: _lineKeys.putIfAbsent(index, () => GlobalKey()),
+      onTouch: synced
+          ? () => touchPos = ref.read(playerServiceProvider).player.position
+          : null,
+      onLongPress: synced ? () => onLineLongPress(index) : null,
     );
   }
 
@@ -783,7 +404,7 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
     final isSynced = lines.isNotEmpty;
 
     Widget content;
-    if (_isSearchingLyrics) {
+    if (isSearchingLyrics) {
       content = const Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -832,18 +453,19 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
             padding: const EdgeInsets.symmetric(vertical: 120),
             itemCount: lines.length,
             itemBuilder: (context, index) {
-              final isActive = index == activeIndex;
               final distance = (index - activeIndex).abs();
-              double opacity = 1.0;
-              if (distance == 1) opacity = 0.5;
-              if (distance > 1) opacity = 0.25;
-
-              return _lyricRow(
+              final opacity = distance == 0
+                  ? 1.0
+                  : distance == 1
+                  ? 0.5
+                  : 0.25;
+              final text = lines[index].text;
+              return _row(
                 index,
-                lines[index].text,
-                isActive: isActive,
+                text.isEmpty ? '♪' : text,
+                isActive: index == activeIndex,
                 opacity: opacity,
-                onLongPress: () => _syncToLine(index),
+                synced: true,
               );
             },
           );
@@ -860,7 +482,7 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
               for (var i = 0; i < plain.length; i++)
                 plain[i].trim().isEmpty
                     ? const SizedBox(height: 14)
-                    : _lyricRow(i, plain[i], compact: true),
+                    : _row(i, plain[i], compact: true),
             ],
           ),
         ),
@@ -891,7 +513,7 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
               height: 40,
               child: Align(
                 alignment: Alignment.centerRight,
-                child: _isSearchingLyrics
+                child: isSearchingLyrics
                     ? const SizedBox.shrink()
                     : Row(
                         mainAxisSize: MainAxisSize.min,
@@ -908,10 +530,20 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
                                 ),
                               ),
                             ),
-                          if (rawLyrics.isNotEmpty) _buildTranslateMenu(),
-                          _buildSearchMenu(
+                          if (rawLyrics.isNotEmpty)
+                            LyricsTranslateMenu(
+                              mode: _subMode,
+                              script: _script,
+                              onSelected: _setSubMode,
+                            ),
+                          LyricsSearchMenu(
                             hasLyrics: rawLyrics.isNotEmpty,
                             isSynced: isSynced,
+                            onAuto: fetchLyricsAutomatically,
+                            onManual: showManualSheet,
+                            onSync: showSyncDialog,
+                            onEdit: editLyrics,
+                            onDelete: deleteLyrics,
                           ),
                         ],
                       ),

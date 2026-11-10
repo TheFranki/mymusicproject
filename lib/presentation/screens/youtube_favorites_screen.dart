@@ -1,4 +1,3 @@
-// lib/presentation/screens/youtube_favorites_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mymusicproject/presentation/providers/youtube_favorites_provider.dart';

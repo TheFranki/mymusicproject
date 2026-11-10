@@ -14,12 +14,12 @@ void showAddToYoutubePlaylistDialog(
 
       return AlertDialog(
         backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text('Añadir a Playlist de YouTube', style: TextStyle(color: Colors.white)),
+        title: const Text('Añadir a Playlist', style: TextStyle(color: Colors.white)),
         content: SizedBox(
           width: double.maxFinite,
           child: playlists.isEmpty
               ? const Text(
-                  'No existen Playlists creadas.\nCrea una desde la sección de Playlists de YouTube.',
+                  'No existen Playlists creadas.\nCrea una desde la sección de Playlists.',
                   style: TextStyle(color: Colors.grey),
                 )
               : ListView.builder(

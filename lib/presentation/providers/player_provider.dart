@@ -1,9 +1,15 @@
 import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../data/sources/local_audio_service.dart';
 import '../../data/sources/youtube_explode_dart.dart';
 import '../../domain/services/player_service.dart';
+
+import 'package:mymusicproject/presentation/widgets/player/lyrics_search_service.dart';
+
+final lyricsSearchProvider = Provider((ref) => LyricsSearchService());
 final playerServiceProvider = Provider((ref) => PlayerService());
 final localAudioServiceProvider = Provider((ref) => LocalAudioService());
 final ytExtractorProvider = Provider((ref) => YouTubeExtractorService());
@@ -20,9 +26,7 @@ final durationProvider = StreamProvider<Duration?>((ref) {
 final isLoadingProvider = StateProvider<bool>((ref) => false);
 final isChangingSongProvider = StateProvider<bool>((ref) => false);
 final isShuffleEnabledProvider = StateProvider<bool>((ref) => false);
-final repeatModeProvider = StateProvider<int>(
-  (ref) => 0,
-);
+final repeatModeProvider = StateProvider<int>((ref) => 0);
 final isVideoModeProvider = StateProvider<bool>((ref) => false);
 final effectiveCurrentSongProvider = Provider<Map<String, String>?>((ref) {
   final currentSong = ref.watch(currentSongProvider);
@@ -45,6 +49,8 @@ class SongMetaData {
   final String artworkPathOrUrl;
   final String lyrics;
   final int lyricsOffsetMs;
+  final String lyricsQuery;
+  final Map<int, int> lyricsAnchors;
 
   SongMetaData({
     required this.title,
@@ -52,6 +58,8 @@ class SongMetaData {
     required this.artworkPathOrUrl,
     required this.lyrics,
     this.lyricsOffsetMs = 0,
+    this.lyricsQuery = '',
+    this.lyricsAnchors = const {},
   });
 
   SongMetaData copyWith({
@@ -60,12 +68,16 @@ class SongMetaData {
     String? artworkPathOrUrl,
     String? lyrics,
     int? lyricsOffsetMs,
+    String? lyricsQuery,
+    Map<int, int>? lyricsAnchors,
   }) => SongMetaData(
     title: title ?? this.title,
     artist: artist ?? this.artist,
     artworkPathOrUrl: artworkPathOrUrl ?? this.artworkPathOrUrl,
     lyrics: lyrics ?? this.lyrics,
     lyricsOffsetMs: lyricsOffsetMs ?? this.lyricsOffsetMs,
+    lyricsQuery: lyricsQuery ?? this.lyricsQuery,
+    lyricsAnchors: lyricsAnchors ?? this.lyricsAnchors,
   );
 
   Map<String, dynamic> toMap() => {
@@ -74,15 +86,30 @@ class SongMetaData {
     'artworkPathOrUrl': artworkPathOrUrl,
     'lyrics': lyrics,
     'lyricsOffsetMs': lyricsOffsetMs,
+    'lyricsQuery': lyricsQuery,
+    'lyricsAnchors': {
+      for (final e in lyricsAnchors.entries) '${e.key}': e.value,
+    },
   };
 
   factory SongMetaData.fromMap(Map<String, dynamic> map) {
+    final anchors = <int, int>{};
+    final raw = map['lyricsAnchors'];
+    if (raw is Map) {
+      for (final e in raw.entries) {
+        final k = int.tryParse(e.key.toString());
+        final v = e.value;
+        if (k != null && v is num) anchors[k] = v.toInt();
+      }
+    }
     return SongMetaData(
       title: map['title'] ?? '',
       artist: map['artist'] ?? '',
       artworkPathOrUrl: map['artworkPathOrUrl'] ?? '',
       lyrics: map['lyrics'] ?? '',
       lyricsOffsetMs: (map['lyricsOffsetMs'] as num?)?.toInt() ?? 0,
+      lyricsQuery: map['lyricsQuery'] ?? '',
+      lyricsAnchors: anchors,
     );
   }
 }
