@@ -4,6 +4,7 @@ import '../providers/player_provider.dart';
 import '../providers/favorites_provider.dart';
 import 'player_screen.dart';
 import 'package:mymusicproject/presentation/providers/local_music_provider.dart';
+import 'package:mymusicproject/presentation/widgets/app_scaffold.dart';
 
 class LocalMusicScreen extends ConsumerWidget {
   const LocalMusicScreen({super.key});
@@ -12,8 +13,7 @@ class LocalMusicScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final songsAsync = ref.watch(localSongsProvider);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F0F0F),
+    return AppScaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         title: const Text(

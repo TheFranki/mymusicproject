@@ -27,7 +27,7 @@ class HomeSearchBar extends StatelessWidget {
           fontSize: 13,
         ),
         decoration: InputDecoration(
-          hintText: 'Buscar en tu música...',
+          hintText: 'Buscar música',
           hintStyle: const TextStyle(
             color: Colors.grey,
             fontSize: 13,

@@ -17,6 +17,8 @@ import '../providers/local_music_provider.dart';
 
 import 'package:mymusicproject/data/sources/persistent_image.dart';
 
+import 'package:mymusicproject/presentation/widgets/app_scaffold.dart';
+
 class PlaylistDetailScreen extends ConsumerWidget {
   final String playlistId;
 
@@ -133,7 +135,7 @@ class PlaylistDetailScreen extends ConsumerWidget {
     );
 
     if (playlist.id.isEmpty) {
-      return Scaffold(
+      return AppScaffold(
         backgroundColor: const Color(0xFF0F0F0F),
         appBar: AppBar(backgroundColor: Colors.transparent),
         body: const Center(
@@ -145,7 +147,7 @@ class PlaylistDetailScreen extends ConsumerWidget {
       );
     }
 
-    return Scaffold(
+    return AppScaffold(
       backgroundColor: const Color(0xFF0F0F0F),
       appBar: AppBar(
         backgroundColor: Colors.transparent,

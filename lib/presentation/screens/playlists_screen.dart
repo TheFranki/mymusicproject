@@ -13,6 +13,8 @@ import 'player_screen.dart';
 
 import 'package:mymusicproject/data/sources/persistent_image.dart';
 
+import 'package:mymusicproject/presentation/widgets/app_scaffold.dart';
+
 class _FolderPlaceholder extends StatelessWidget {
   const _FolderPlaceholder();
 
@@ -151,8 +153,7 @@ class PlaylistsScreen extends ConsumerWidget {
     final playlists = ref.watch(playlistsProvider);
     final currentSong = ref.watch(effectiveCurrentSongProvider);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F0F0F),
+    return AppScaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,

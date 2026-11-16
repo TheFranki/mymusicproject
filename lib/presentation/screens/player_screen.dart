@@ -7,6 +7,8 @@ import 'package:mymusicproject/presentation/widgets/player/local_player_view.dar
 import 'package:mymusicproject/presentation/widgets/player/youtube_player_view.dart';
 import 'package:mymusicproject/presentation/widgets/add_to_playlist_dialog.dart';
 import 'package:mymusicproject/presentation/widgets/show_add_to_youtube_playlist_dialog.dart';
+import 'package:mymusicproject/presentation/widgets/app_scaffold.dart';
+
 class PlayerScreen extends ConsumerWidget {
   const PlayerScreen({super.key});
 
@@ -17,8 +19,7 @@ class PlayerScreen extends ConsumerWidget {
     final songPath = song?['data']?.toString() ?? '';
 
     if (currentSong == null) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF121212),
+      return const AppScaffold(
         body: Center(
           child: Text('Nada sonando', style: TextStyle(color: Colors.white)),
         ),
@@ -27,8 +28,7 @@ class PlayerScreen extends ConsumerWidget {
 
     final isLocal = currentSong['isLocal'] == 'true';
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+    return AppScaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,

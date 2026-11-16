@@ -12,9 +12,15 @@ import 'package:mymusicproject/presentation/widgets/home/song_list.dart';
 import 'player_screen.dart';
 import 'youtube_search_screen.dart';
 
+import 'package:mymusicproject/presentation/widgets/player/sleep_timer_sheet.dart';
 import 'package:mymusicproject/presentation/screens/favorites_screen.dart';
 import 'package:mymusicproject/presentation/providers/local_music_provider.dart';
 import 'package:mymusicproject/presentation/providers/custom_artwork_provider.dart';
+
+import 'package:mymusicproject/presentation/screens/settings_screen.dart';
+import 'package:mymusicproject/presentation/widgets/app_scaffold.dart';
+
+import 'package:mymusicproject/presentation/providers/library_view_provider.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -34,7 +40,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.dispose();
   }
 
-  int _compare(
+  /*int _compare(
     Map<String, dynamic> a,
     Map<String, dynamic> b,
     String option,
@@ -70,15 +76,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       default:
         return titleA.compareTo(titleB);
     }
-  }
+  }*/
 
   @override
   Widget build(BuildContext context) {
-    final songsAsync = ref.watch(localSongsProvider);
+    //final songsAsync = ref.watch(localSongsProvider);
     final currentSong = ref.watch(effectiveCurrentSongProvider);
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F0F0F),
+    return AppScaffold(
       appBar: AppBar(
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
+          ),
+        ],
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: HomeSearchBar(
@@ -86,11 +100,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           query: _searchQuery,
           onChanged: (value) {
             setState(() => _searchQuery = value.trim().toLowerCase());
+            ref.read(librarySearchQueryProvider.notifier).state = value;
           },
           onSubmitted: () => FocusScope.of(context).unfocus(),
           onClear: () {
             _searchController.clear();
             setState(() => _searchQuery = '');
+            ref.read(librarySearchQueryProvider.notifier).state = '';
             FocusScope.of(context).unfocus();
           },
         ),
@@ -118,6 +134,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                 );
               },
+              onTimer: () => showSleepTimerSheet(context),
               onPlayLists: () {
                 Navigator.push(
                   context,
@@ -135,8 +152,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 children: [
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
-                      foregroundColor: Colors.white,
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
                       minimumSize: const Size(120, 36),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
@@ -148,7 +165,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       style: TextStyle(fontSize: 12),
                     ),
                     onPressed: () {
-                      songsAsync.whenData((songs) {
+                      ref.read(localSongsProvider).whenData((songs) {
                         _homeAction.playRandomSong(
                           ref: ref,
                           context: context,
@@ -186,68 +203,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 4),
             Expanded(
-              child: songsAsync.when(
-                data: (songs) {
-                  final metadataMap = ref.watch(customSongMetadataProvider);
-                  final sortOption = ref.watch(sortOptionProvider);
-                  final playCountMap = ref.watch(playCountProvider);
-                  final processedSongs = songs.map((song) {
-                    final id = song['id']?.toString() ?? '';
-                    final metadata = metadataMap[id];
-
-                    final title = metadata?.title.isNotEmpty == true
-                        ? metadata!.title
-                        : (song['title']?.toString() ?? '');
-
-                    final artist = metadata?.artist.isNotEmpty == true
-                        ? metadata!.artist
-                        : (song['artist']?.toString() ??
-                              song['author']?.toString() ??
-                              '');
-
-                    return <String, dynamic>{
-                      ...song,
-                      'effectiveTitle': title,
-                      'effectiveArtist': artist,
-                    };
-                  }).toList();
-
-                  processedSongs.sort(
-                    (a, b) => _compare(a, b, sortOption, playCountMap),
-                  );
-
-                  final filteredSongs = processedSongs.where((song) {
-                    final title = song['effectiveTitle']
-                        .toString()
-                        .toLowerCase();
-                    final artist = song['effectiveArtist']
-                        .toString()
-                        .toLowerCase();
-                    return title.contains(_searchQuery) ||
-                        artist.contains(_searchQuery);
-                  }).toList();
-
-                  return SongList(
-                    songs: filteredSongs,
-                    onSongTap: (song) async {
-                      await _homeAction.playSongAndNavigate(
-                        ref: ref,
-                        context: context,
-                        song: song,
-                        queue: filteredSongs,
+              child: Consumer(
+                builder: (context, ref, _) {
+                  return ref
+                      .watch(filteredSongsProvider)
+                      .when(
+                        data: (songs) => SongList(
+                          songs: songs,
+                          onSongTap: (song) async {
+                            await _homeAction.playSongAndNavigate(
+                              ref: ref,
+                              context: context,
+                              song: song,
+                              queue: songs,
+                            );
+                          },
+                        ),
+                        loading: () =>
+                            const Center(child: CircularProgressIndicator()),
+                        error: (error, stack) => Center(
+                          child: Text(
+                            'Error: $error',
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                        ),
                       );
-                    },
-                  );
                 },
-                loading: () => const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
-                ),
-                error: (error, stack) => Center(
-                  child: Text(
-                    'Error: $error',
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                ),
               ),
             ),
           ],

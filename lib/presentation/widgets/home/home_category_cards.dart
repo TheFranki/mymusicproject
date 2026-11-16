@@ -1,20 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mymusicproject/presentation/providers/sleep_timer_provider.dart';
 
 class HomeCategoryCards extends ConsumerWidget {
   final VoidCallback onFavorites;
   final VoidCallback onSearch;
   final VoidCallback onPlayLists;
+  final VoidCallback onTimer;
 
   const HomeCategoryCards({
     super.key,
     required this.onFavorites,
     required this.onSearch,
     required this.onPlayLists,
+    required this.onTimer,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final timer = ref.watch(sleepTimerProvider);
+    final timerTitle = !timer.active
+        ? 'Temporizador'
+        : timer.endOfSong
+        ? 'Fin canción'
+        : formatTimer(timer.remaining!);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Row(
@@ -30,6 +40,15 @@ class HomeCategoryCards extends ConsumerWidget {
           const SizedBox(width: 12),
           Expanded(
             child: _buildCategoryCard(
+              title: timerTitle,
+              icon: timer.active ? Icons.timer : Icons.timer_outlined,
+              accentColor: Colors.orangeAccent,
+              onTap: onTimer,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildCategoryCard(
               title: 'Playlists',
               icon: Icons.folder_special,
               accentColor: Colors.purpleAccent,
@@ -37,6 +56,7 @@ class HomeCategoryCards extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 12),
+
           Expanded(
             child: _buildCategoryCard(
               title: 'Buscar Online',
@@ -62,9 +82,14 @@ class HomeCategoryCards extends ConsumerWidget {
         height: 85,
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E1E1E),
+          color: Colors.black.withValues(
+            alpha: 0.25,
+          ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white10, width: 1),
+          border: Border.all(
+            color: Colors.white24,
+            width: 1,
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.3),

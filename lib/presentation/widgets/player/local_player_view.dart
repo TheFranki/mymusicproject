@@ -6,6 +6,7 @@ import 'package:mymusicproject/presentation/providers/custom_artwork_provider.da
 import 'package:mymusicproject/presentation/widgets/song_artwork.dart';
 import 'package:mymusicproject/presentation/widgets/player/flippable_artwork_view.dart';
 
+
 String _formatDuration(Duration d) {
   String two(int n) => n.toString().padLeft(2, '0');
   final m = two(d.inMinutes.remainder(60));
@@ -227,13 +228,13 @@ class _Controls extends ConsumerWidget {
           onPressed: controller.previous,
         ),
         Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration( // sin const
+            color: Theme.of(context).colorScheme.primary,
             shape: BoxShape.circle,
           ),
           child: IconButton(
             iconSize: 50,
-            color: Colors.black,
+            color: Theme.of(context).colorScheme.onPrimary,
             icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
             onPressed: () async {
               final player = ref.read(playerServiceProvider);

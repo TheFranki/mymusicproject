@@ -14,6 +14,12 @@ import 'custom_artwork_provider.dart';
 import 'playlist_provider.dart';
 import 'search_provider.dart';
 
+import 'favorites_provider.dart';
+import 'youtube_favorites_provider.dart';
+
+import '../app_messenger.dart';
+import 'sleep_timer_provider.dart';
+
 const String _savedQueueKey = 'persisted_playback_queue';
 String _s(Map m, String k) => m[k]?.toString().trim() ?? '';
 String _first(Iterable<String?> values) {
@@ -164,6 +170,7 @@ final resolvedPlaylistSongsProvider =
 final playerControllerProvider = Provider<PlayerController>((ref) {
   final controller = PlayerController(ref);
   ref.onDispose(controller.dispose);
+  controller.startGaplessWatcher(); // <- nuevo
   ref.listen<bool>(isShuffleEnabledProvider, (prev, next) {
     if (prev != next) controller.rebuildForShuffle(next);
   });
@@ -175,14 +182,18 @@ class PlayerController {
   PlayerController(this.ref);
   final Ref ref;
   int _token = 0;
+  int _failStreak = 0;
   bool _restored = false;
   final List<String> _recentYoutube = [];
   String? _relatedFor;
   StreamSubscription<Duration>? _posSub;
   StreamSubscription<bool>? _playSub;
+  StreamSubscription<int?>? _idxSub;
+
   void dispose() {
     _posSub?.cancel();
     _playSub?.cancel();
+    _idxSub?.cancel();
   }
 
   Map<String, String> _resolve(Map<String, dynamic> raw) => resolveSong(
@@ -375,7 +386,10 @@ class PlayerController {
     );
     _setQueue(q);
 
-    if (_isAlreadyLoaded(startSong['id']!)) return;
+    if (_isAlreadyLoaded(startSong['id']!)) {
+      unawaited(syncPreload());
+      return;
+    }
 
     await _play(q.order[q.index]);
   }
@@ -389,6 +403,14 @@ class PlayerController {
   }
 
   Future<void> next({bool auto = false}) async {
+    if (auto && ref.read(sleepTimerProvider.notifier).consumeEndOfSong()) {
+      final s = ref.read(playerServiceProvider);
+      await s.pause();
+      await s.player.seek(Duration.zero);
+      unawaited(syncPreload());
+      return;
+    }
+
     final q = _validQueue();
     if (q == null) {
       await _nextRelated();
@@ -447,6 +469,7 @@ class PlayerController {
         origin: q.origin,
       ),
     );
+    unawaited(syncPreload());
   }
 
   void toggleRepeat() {
@@ -456,6 +479,108 @@ class PlayerController {
         .read(playerServiceProvider)
         .player
         .setLoopMode(mode == 2 ? LoopMode.one : LoopMode.off);
+    unawaited(syncPreload());
+  }
+
+  void toggleCurrentFavorite() {
+    final song = ref.read(currentSongProvider);
+    if (song == null) return;
+    if (song['isLocal'] == 'true') {
+      ref
+          .read(favoritesIdsProvider.notifier)
+          .toggleFavorite(song['data'] ?? '');
+    } else {
+      ref.read(youtubeFavoritesProvider.notifier).toggleFavorite(song);
+    }
+  }
+
+  Future<void> refreshNowPlaying() async {
+    final current = ref.read(currentSongProvider);
+    if (current == null) return;
+    final song = _resolve(current);
+    await ref
+        .read(playerServiceProvider)
+        .updateNowPlaying(
+          id: song['id']!,
+          title: song['title']!,
+          author: song['author'],
+          thumbnailUrl: song['thumbnail'],
+        );
+  }
+
+  Map<String, String>? _peekNext() {
+    final q = _validQueue();
+    if (q == null || q.order.length < 2) return null;
+
+    final repeat = ref.read(repeatModeProvider);
+    if (repeat == 2) return null;
+    if (ref.read(sleepTimerProvider).endOfSong) return null;
+
+    var i = q.index + 1;
+    if (i >= q.order.length) {
+      if (repeat == 0) return null;
+      i = 0;
+    }
+
+    final s = _resolve(q.order[i]);
+    if (s['isLocal'] != 'true' || (s['data'] ?? '').isEmpty) return null;
+    if (s['id'] == q.order[q.index]['id']) return null;
+    return s;
+  }
+
+  Future<void> syncPreload() async {
+    try {
+      final song = _peekNext();
+      await ref
+          .read(playerServiceProvider)
+          .setPreload(song?['id'], song?['data']);
+    } catch (e) {
+      debugPrint('[PlayerController] Error al precargar: $e');
+    }
+  }
+
+  void startGaplessWatcher() {
+    _idxSub?.cancel();
+    final player = ref.read(playerServiceProvider).player;
+    _idxSub = player.currentIndexStream.listen((_) => _onIndexChanged());
+  }
+
+  Future<void> _onIndexChanged() async {
+    if (ref.read(isLoadingProvider)) return;
+    final player = ref.read(playerServiceProvider).player;
+    final tag = player.sequenceState?.currentSource?.tag;
+    if (tag is! String) return;
+    final current = ref.read(currentSongProvider);
+    if (current == null || tag == current['id']) return;
+    final q = _validQueue();
+    final next = _peekNext();
+    if (q == null || next == null || next['id'] != tag) return;
+    var i = q.index + 1;
+    if (i >= q.order.length) i = 0;
+    ref.read(playbackQueueProvider.notifier).state = q.copyWith(index: i);
+    await _onGaplessAdvance(next);
+  }
+
+  Future<void> _onGaplessAdvance(Map<String, String> raw) async {
+    final song = _resolve(raw);
+    final id = song['id']!;
+    _pendingCountId = id;
+
+    ref.read(currentSongProvider.notifier).state = song;
+    unawaited(savePlaybackState(song, Duration.zero));
+    if (ref.read(isPlaylistActiveProvider)) {
+      ref.read(playlistCurrentSongProvider.notifier).state = song;
+    }
+
+    final service = ref.read(playerServiceProvider);
+    await service.publishMediaItem(
+      id: id,
+      title: song['title']!,
+      author: song['author'],
+      thumbnailUrl: song['thumbnail'],
+      duration: service.player.duration,
+    );
+    unawaited(syncPreload());
   }
 
   PlaybackQueue? _validQueue() {
@@ -570,6 +695,7 @@ class PlayerController {
     }
     ref.read(isLoadingProvider.notifier).state = true;
 
+    var failed = false;
     try {
       final service = ref.read(playerServiceProvider);
       final initial = startAt == Duration.zero ? null : startAt;
@@ -600,7 +726,12 @@ class PlayerController {
           autoPlay: autoPlay,
         );
       }
+      if (token == _token && song['isLocal'] == 'true') {
+        unawaited(syncPreload());
+      }
+      _failStreak = 0;
     } catch (e, st) {
+      failed = true;
       debugPrint('[PlayerController] Error al reproducir "$id": $e');
       debugPrintStack(stackTrace: st);
     } finally {
@@ -608,6 +739,29 @@ class PlayerController {
         ref.read(isLoadingProvider.notifier).state = false;
       }
     }
+    if (failed && token == _token) {
+      await _handlePlayFailure(song, autoPlay);
+    }
+  }
+
+  Future<void> _handlePlayFailure(
+    Map<String, String> song,
+    bool autoPlay,
+  ) async {
+    final title = song['title'] ?? 'la canción';
+    showAppMessage(
+      song['isLocal'] == 'true'
+          ? 'No se pudo reproducir "$title" (¿archivo movido o dañado?)'
+          : 'No se pudo reproducir "$title"',
+    );
+    if (!autoPlay) return;
+    _failStreak++;
+    final q = _validQueue();
+    if (q == null || q.order.length < 2 || _failStreak >= 3) {
+      _failStreak = 0;
+      return;
+    }
+    await next();
   }
 
   Future<void> pauseAndSave() async {

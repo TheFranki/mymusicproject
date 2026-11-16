@@ -38,7 +38,7 @@ void showManualLyricsSheet(
               style: TextStyle(color: Colors.white),
             ),
             subtitle: const Text(
-              'Copia la letra de una página, se sincroniza automáticamente',
+              'Copia la letra de una página.',
               style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
             onTap: () {

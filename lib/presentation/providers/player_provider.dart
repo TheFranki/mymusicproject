@@ -9,8 +9,15 @@ import '../../domain/services/player_service.dart';
 
 import 'package:mymusicproject/presentation/widgets/player/lyrics_search_service.dart';
 
+import '../../domain/services/audio_handler.dart';
+
 final lyricsSearchProvider = Provider((ref) => LyricsSearchService());
-final playerServiceProvider = Provider((ref) => PlayerService());
+final audioHandlerProvider = Provider<AppAudioHandler>(
+  (ref) => throw UnimplementedError('Se inicializa en main()'),
+);
+final playerServiceProvider = Provider(
+  (ref) => PlayerService(ref.watch(audioHandlerProvider)),
+);
 final localAudioServiceProvider = Provider((ref) => LocalAudioService());
 final ytExtractorProvider = Provider((ref) => YouTubeExtractorService());
 final currentSongProvider = StateProvider<Map<String, String>?>((ref) => null);

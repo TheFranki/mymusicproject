@@ -9,7 +9,7 @@ import '../providers/custom_artwork_provider.dart';
 import '../widgets/song_artwork.dart';
 import 'player_screen.dart';
 import '../widgets/home/home_mini_player.dart';
-
+import 'package:mymusicproject/presentation/widgets/app_scaffold.dart';
 class FavoritesScreen extends ConsumerWidget {
   const FavoritesScreen({super.key});
 
@@ -22,7 +22,7 @@ class FavoritesScreen extends ConsumerWidget {
     final library = ref.watch(libraryByIdProvider);
     final currentSong = ref.watch(effectiveCurrentSongProvider);
 
-    return Scaffold(
+    return AppScaffold(
       bottomNavigationBar:
           currentSong != null &&
               currentSong['id'] != null &&
