@@ -126,6 +126,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   MaterialPageRoute(builder: (_) => const FavoritesScreen()),
                 );
               },
+              /*
               onSearch: () {
                 Navigator.push(
                   context,
@@ -133,7 +134,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     builder: (_) => const YoutubeSearchScreen(),
                   ),
                 );
-              },
+              },*/
               onTimer: () => showSleepTimerSheet(context),
               onPlayLists: () {
                 Navigator.push(

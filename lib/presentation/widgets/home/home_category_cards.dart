@@ -4,14 +4,14 @@ import 'package:mymusicproject/presentation/providers/sleep_timer_provider.dart'
 
 class HomeCategoryCards extends ConsumerWidget {
   final VoidCallback onFavorites;
-  final VoidCallback onSearch;
+  //final VoidCallback onSearch;
   final VoidCallback onPlayLists;
   final VoidCallback onTimer;
 
   const HomeCategoryCards({
     super.key,
     required this.onFavorites,
-    required this.onSearch,
+    //required this.onSearch,
     required this.onPlayLists,
     required this.onTimer,
   });
@@ -56,7 +56,7 @@ class HomeCategoryCards extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 12),
-
+/*
           Expanded(
             child: _buildCategoryCard(
               title: 'Buscar Online',
@@ -64,7 +64,7 @@ class HomeCategoryCards extends ConsumerWidget {
               accentColor: Colors.blueAccent,
               onTap: onSearch,
             ),
-          ),
+          ),*/
         ],
       ),
     );
