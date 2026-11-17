@@ -28,10 +28,10 @@ enum RowStyle { plain, lines, cards }
 
 extension RowStyleLabel on RowStyle {
   String get label => switch (this) {
-        RowStyle.plain => 'Normal',
-        RowStyle.lines => 'Con líneas',
-        RowStyle.cards => 'Tarjetas',
-      };
+    RowStyle.plain => 'Normal',
+    RowStyle.lines => 'Con líneas',
+    RowStyle.cards => 'Tarjetas',
+  };
 }
 
 class AppThemeConfig {
@@ -49,13 +49,9 @@ class AppThemeConfig {
   final List<Color> bg;
   final GradientDir dir;
   final RowStyle rowStyle;
-  final Color? rowColor; // null = igual al acento
-
+  final Color? rowColor;
   bool get isGradient => bg.length > 1;
-
   Color get lineColor => rowColor ?? accent;
-
-  /// Texto de la canción que suena: si el color es muy oscuro, se aclara.
   Color get lineTextColor => lineColor.computeLuminance() < 0.25
       ? Color.lerp(lineColor, Colors.white, 0.6)!
       : lineColor;
@@ -68,17 +64,15 @@ class AppThemeConfig {
     RowStyle? rowStyle,
     Color? rowColor,
     bool clearRowColor = false,
-  }) =>
-      AppThemeConfig(
-        name: name ?? this.name,
-        accent: accent ?? this.accent,
-        bg: bg ?? this.bg,
-        dir: dir ?? this.dir,
-        rowStyle: rowStyle ?? this.rowStyle,
-        rowColor: clearRowColor ? null : (rowColor ?? this.rowColor),
-      );
+  }) => AppThemeConfig(
+    name: name ?? this.name,
+    accent: accent ?? this.accent,
+    bg: bg ?? this.bg,
+    dir: dir ?? this.dir,
+    rowStyle: rowStyle ?? this.rowStyle,
+    rowColor: clearRowColor ? null : (rowColor ?? this.rowColor),
+  );
 
-  /// Solo colores y fondo (se usa para marcar la paleta elegida).
   bool sameColors(AppThemeConfig o) =>
       accent.toARGB32() == o.accent.toARGB32() &&
       bg.length == o.bg.length &&
@@ -86,7 +80,6 @@ class AppThemeConfig {
       Iterable<int>.generate(bg.length)
           .every((i) => bg[i].toARGB32() == o.bg[i].toARGB32());
 
-  /// Todo (se usa para saber si hay cambios sin guardar).
   bool sameLook(AppThemeConfig o) =>
       sameColors(o) &&
       rowStyle == o.rowStyle &&
@@ -97,44 +90,48 @@ class AppThemeConfig {
     return BoxDecoration(
       gradient: switch (dir) {
         GradientDir.vertical => LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: bg,
-          ),
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: bg,
+        ),
         GradientDir.diagonal => LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: bg,
-          ),
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: bg,
+        ),
         GradientDir.horizontal => LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            colors: bg,
-          ),
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: bg,
+        ),
         GradientDir.radial => RadialGradient(
-            center: const Alignment(0, -0.5),
-            radius: 1.3,
-            colors: bg,
-          ),
+          center: const Alignment(0, -0.5),
+          radius: 1.3,
+          colors: bg,
+        ),
       },
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'accent': accent.toARGB32(),
-        'bg': bg.map((c) => c.toARGB32()).toList(),
-        'dir': dir.index,
-        'rowStyle': rowStyle.index,
-        'rowColor': rowColor?.toARGB32(),
-      };
+    'name': name,
+    'accent': accent.toARGB32(),
+    'bg': bg.map((c) => c.toARGB32()).toList(),
+    'dir': dir.index,
+    'rowStyle': rowStyle.index,
+    'rowColor': rowColor?.toARGB32(),
+  };
 
   factory AppThemeConfig.fromJson(Map<String, dynamic> j) {
     final bg = (j['bg'] as List).map((e) => clampBg(Color(e as int))).toList();
-    final dirIdx =
-        ((j['dir'] as int?) ?? 0).clamp(0, GradientDir.values.length - 1);
-    final styleIdx = ((j['rowStyle'] as int?) ?? RowStyle.lines.index)
-        .clamp(0, RowStyle.values.length - 1);
+    final dirIdx = ((j['dir'] as int?) ?? 0).clamp(
+      0,
+      GradientDir.values.length - 1,
+    );
+    final styleIdx = ((j['rowStyle'] as int?) ?? RowStyle.lines.index).clamp(
+      0,
+      RowStyle.values.length - 1,
+    );
     final rc = j['rowColor'] as int?;
     return AppThemeConfig(
       name: (j['name'] as String?) ?? 'Personalizado',
@@ -209,21 +206,19 @@ class AppThemePresets {
 
 ThemeData buildAppTheme(AppThemeConfig c) {
   final base = c.bg.first;
-  final scheme =
-      ColorScheme.fromSeed(
-        seedColor: c.accent,
-        brightness: Brightness.dark,
-      ).copyWith(
-        primary: c.accent,
-        onPrimary: c.accent.computeLuminance() > 0.5
-            ? Colors.black
-            : Colors.white,
-        surface: Color.lerp(base, Colors.black, 0.35),
-        surfaceContainerLow: Color.lerp(base, Colors.black, 0.2),
-        surfaceContainer: Color.lerp(base, Colors.white, 0.06),
-        surfaceContainerHigh: Color.lerp(base, Colors.white, 0.10),
-      );
-    return ThemeData.dark(useMaterial3: true).copyWith(
+  final scheme = ColorScheme.fromSeed(
+    seedColor: c.accent,
+    brightness: Brightness.dark,
+  ).copyWith(
+    primary: c.accent,
+    onPrimary: c.accent.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+    surface: Color.lerp(base, Colors.black, 0.35),
+    surfaceContainerLow: Color.lerp(base, Colors.black, 0.2),
+    surfaceContainer: Color.lerp(base, Colors.white, 0.06),
+    surfaceContainerHigh: Color.lerp(base, Colors.white, 0.10),
+  );
+
+  return ThemeData.dark(useMaterial3: true).copyWith(
     colorScheme: scheme,
     scaffoldBackgroundColor: base,
     appBarTheme: const AppBarTheme(
@@ -231,6 +226,16 @@ ThemeData buildAppTheme(AppThemeConfig c) {
       surfaceTintColor: Colors.transparent,
       scrolledUnderElevation: 0,
       elevation: 0,
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: scheme.surfaceContainerHigh,
+      contentTextStyle: TextStyle(color: scheme.onSurface),
+      actionTextColor: scheme.primary,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Colors.white12),
+      ),
     ),
   );
 }

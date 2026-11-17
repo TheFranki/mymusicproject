@@ -20,6 +20,8 @@ import 'youtube_favorites_provider.dart';
 import '../app_messenger.dart';
 import 'sleep_timer_provider.dart';
 
+import '../widgets/app_snack.dart';
+
 const String _savedQueueKey = 'persisted_playback_queue';
 String _s(Map m, String k) => m[k]?.toString().trim() ?? '';
 String _first(Iterable<String?> values) {
@@ -744,23 +746,32 @@ class PlayerController {
     }
   }
 
-  Future<void> _handlePlayFailure(
+    Future<void> _handlePlayFailure(
     Map<String, String> song,
     bool autoPlay,
   ) async {
     final title = song['title'] ?? 'la canción';
-    showAppMessage(
-      song['isLocal'] == 'true'
-          ? 'No se pudo reproducir "$title" (¿archivo movido o dañado?)'
-          : 'No se pudo reproducir "$title"',
-    );
-    if (!autoPlay) return;
-    _failStreak++;
+    if (autoPlay) _failStreak++;
+
     final q = _validQueue();
-    if (q == null || q.order.length < 2 || _failStreak >= 3) {
-      _failStreak = 0;
+    final canSkip =
+        autoPlay && q != null && q.order.length >= 2 && _failStreak < 3;
+
+    final base = song['isLocal'] == 'true'
+        ? 'No se pudo abrir "$title" (¿archivo movido o dañado?)'
+        : 'No se pudo reproducir "$title"';
+    showAppMessage(
+      canSkip ? '$base\nPasando a la siguiente…' : base,
+      kind: AppSnackKind.warning,
+    );
+
+    if (!canSkip) {
+      if (autoPlay) _failStreak = 0;
       return;
     }
+
+    await Future.delayed(const Duration(milliseconds: 1500));
+    if (ref.read(currentSongProvider)?['id'] != song['id']) return;
     await next();
   }
 

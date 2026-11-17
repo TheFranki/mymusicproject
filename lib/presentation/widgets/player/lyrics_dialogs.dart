@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:mymusicproject/presentation/error_messages.dart';
+import 'package:mymusicproject/presentation/widgets/discard_guard.dart';
 import 'package:mymusicproject/presentation/widgets/player/lyrics_search_service.dart';
 
 Future<LyricsCandidate?> showLyricsPicker(
@@ -42,8 +44,9 @@ class _LyricsPickerDialog extends StatefulWidget {
 }
 
 class _LyricsPickerDialogState extends State<_LyricsPickerDialog> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.initialQuery);
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialQuery,
+  );
   List<LyricsCandidate> _results = const [];
   bool _loading = true;
   String? _error;
@@ -85,10 +88,11 @@ class _LyricsPickerDialogState extends State<_LyricsPickerDialog> {
         _error = 'Sin conexión con el servidor de letras. Intenta de nuevo.';
         _loading = false;
       });
-    } catch (e) {
+    } catch (e, st) {
+      logError('Selector de letras', e, st);
       if (!mounted || token != _token) return;
       setState(() {
-        _error = 'Error al buscar: $e';
+        _error = friendlyError(e, what: 'No se pudo buscar');
         _loading = false;
       });
     }
@@ -151,19 +155,23 @@ class _LyricsPickerDialogState extends State<_LyricsPickerDialog> {
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(meta,
+          Text(
+            meta,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+          if (c.preview.isNotEmpty)
+            Text(
+              '“${c.preview}”',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.grey, fontSize: 12)),
-          if (c.preview.isNotEmpty)
-            Text('“${c.preview}”',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                )),
+              style: const TextStyle(
+                color: Colors.white54,
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
           Text(status, style: TextStyle(color: color, fontSize: 11)),
         ],
       ),
@@ -178,18 +186,20 @@ class _LyricsPickerDialogState extends State<_LyricsPickerDialog> {
     Widget body;
     if (_loading) {
       body = const Center(
-          child: CircularProgressIndicator(color: Colors.blueAccent));
+        child: CircularProgressIndicator(color: Colors.blueAccent),
+      );
     } else if (_error != null) {
       body = Center(
-        child: Text(_error!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+        child: Text(
+          _error!,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+        ),
       );
     } else if (_results.isEmpty) {
       body = const Center(
         child: Text(
-          'Sin resultados.\nPrueba con el título original (por ejemplo en '
-          'japonés) o usa "Pegar letra".',
+          'Sin resultados.\nPrueba con el título original o usa "Pegar letra".',
           textAlign: TextAlign.center,
           style: TextStyle(color: Colors.grey, fontSize: 13),
         ),
@@ -206,8 +216,10 @@ class _LyricsPickerDialogState extends State<_LyricsPickerDialog> {
     return AlertDialog(
       backgroundColor: const Color(0xFF1E1E1E),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text('Elegir letra',
-          style: TextStyle(color: Colors.white, fontSize: 16)),
+      title: const Text(
+        'Elegir letra',
+        style: TextStyle(color: Colors.white, fontSize: 16),
+      ),
       content: SizedBox(
         width: double.maxFinite,
         height: height,
@@ -253,6 +265,7 @@ class _LyricsPickerDialogState extends State<_LyricsPickerDialog> {
 Future<String?> showPasteLyricsDialog(BuildContext context) {
   return showDialog<String>(
     context: context,
+    barrierDismissible: false,
     builder: (_) => const _PasteLyricsDialog(),
   );
 }
@@ -266,6 +279,8 @@ class _PasteLyricsDialog extends StatefulWidget {
 
 class _PasteLyricsDialogState extends State<_PasteLyricsDialog> {
   final _controller = TextEditingController();
+
+  bool get _isDirty => _controller.text.trim().isNotEmpty;
 
   @override
   void dispose() {
@@ -281,66 +296,75 @@ class _PasteLyricsDialogState extends State<_PasteLyricsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF1E1E1E),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text('Pegar letra',
-          style: TextStyle(color: Colors.white, fontSize: 16)),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Pega la letra de cualquier página. Si trae tiempos '
-              '[01:23.45] se usan tal cual; si no, se reparten '
-              'automáticamente según la duración de la canción.',
-              style: TextStyle(color: Colors.grey, fontSize: 12),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _controller,
-              maxLines: 10,
-              minLines: 6,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'Pega aquí la letra…',
-                hintStyle: const TextStyle(color: Colors.grey),
-                enabledBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.grey.shade700),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderSide: const BorderSide(color: Colors.blueAccent),
-                  borderRadius: BorderRadius.circular(8),
+    return DiscardGuard(
+      isDirty: () => _isDirty,
+      child: AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Pegar letra',
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Pega la letra de cualquier página. Si trae tiempos '
+                '[01:23.45] se usan tal cual; si no, se reparten '
+                'automáticamente según la duración de la canción.',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _controller,
+                maxLines: 10,
+                minLines: 6,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: 'Pega aquí la letra…',
+                  hintStyle: const TextStyle(color: Colors.grey),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey.shade700),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: const BorderSide(color: Colors.blueAccent),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
               ),
-            ),
-            /*TextButton.icon(
-              onPressed: _fromClipboard,
-              icon: const Icon(Icons.content_paste,
-                  size: 16, color: Colors.blueAccent),
-              label: const Text('Pegar del portapapeles',
-                  style: TextStyle(color: Colors.blueAccent, fontSize: 12)),
-            ),*/
-          ],
+              /*TextButton.icon(
+                onPressed: _fromClipboard,
+                icon: const Icon(Icons.content_paste,
+                    size: 16, color: Colors.blueAccent),
+                label: const Text('Pegar del portapapeles',
+                    style: TextStyle(color: Colors.blueAccent, fontSize: 12)),
+              ),*/
+            ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              if (!_isDirty || await confirmDiscard(context)) {
+                if (context.mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            onPressed: () {
+              final t = _controller.text.trim();
+              Navigator.pop(context, t.isEmpty ? null : t);
+            },
+            child: const Text('Usar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-          onPressed: () {
-            final t = _controller.text.trim();
-            Navigator.pop(context, t.isEmpty ? null : t);
-          },
-          child: const Text('Usar', style: TextStyle(color: Colors.white)),
-        ),
-      ],
     );
   }
 }
@@ -352,10 +376,9 @@ Future<String?> showEditLyricsDialog(
 }) {
   return showDialog<String>(
     context: context,
-    builder: (_) => _EditLyricsDialog(
-      initial: initial,
-      currentPosition: currentPosition,
-    ),
+    barrierDismissible: false,
+    builder: (_) =>
+        _EditLyricsDialog(initial: initial, currentPosition: currentPosition),
   );
 }
 
@@ -373,8 +396,11 @@ class _EditLyricsDialog extends StatefulWidget {
 }
 
 class _EditLyricsDialogState extends State<_EditLyricsDialog> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.initial);
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial,
+  );
+
+  bool get _isDirty => _controller.text != widget.initial;
 
   @override
   void dispose() {
@@ -391,8 +417,9 @@ class _EditLyricsDialogState extends State<_EditLyricsDialog> {
   void _insertNote() {
     final text = _controller.text;
     final sel = _controller.selection;
-    final pos =
-        sel.isValid ? sel.start.clamp(0, text.length).toInt() : text.length;
+    final pos = sel.isValid
+        ? sel.start.clamp(0, text.length).toInt()
+        : text.length;
     final synced = RegExp(r'\[\d{1,3}:\d{2}').hasMatch(text);
     final tag = synced ? _tag(widget.currentPosition()) : '';
 
@@ -409,62 +436,76 @@ class _EditLyricsDialogState extends State<_EditLyricsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF1E1E1E),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text('Editar letra',
-          style: TextStyle(color: Colors.white, fontSize: 16)),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Cada línea con tiempo se ve como texto. '
-              'Para marcar una pausa instrumental, escucha la canción hasta '
-              'ese punto, pon el cursor y toca "Insertar ♪": se guarda con '
-              'el tiempo actual.',
-              style: TextStyle(color: Colors.grey, fontSize: 12),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _controller,
-              maxLines: 12,
-              minLines: 8,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-              decoration: InputDecoration(
-                enabledBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.grey.shade700),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderSide: const BorderSide(color: Colors.blueAccent),
-                  borderRadius: BorderRadius.circular(8),
+    return DiscardGuard(
+      isDirty: () => _isDirty,
+      child: AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Editar letra',
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Cada línea con tiempo se ve como texto.'
+                'Para marcar una pausa instrumental, escucha la canción hasta '
+                'ese punto, pon el cursor y toca "Insertar ♪": se guarda con '
+                'el tiempo actual.',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _controller,
+                maxLines: 12,
+                minLines: 8,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: InputDecoration(
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey.shade700),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: const BorderSide(color: Colors.blueAccent),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
               ),
-            ),
-            TextButton.icon(
-              onPressed: _insertNote,
-              icon: const Icon(Icons.music_note,
-                  size: 16, color: Colors.blueAccent),
-              label: const Text('Insertar ♪',
-                  style: TextStyle(color: Colors.blueAccent, fontSize: 12)),
-            ),
-          ],
+              TextButton.icon(
+                onPressed: _insertNote,
+                icon: const Icon(
+                  Icons.music_note,
+                  size: 16,
+                  color: Colors.blueAccent,
+                ),
+                label: const Text(
+                  'Insertar ♪',
+                  style: TextStyle(color: Colors.blueAccent, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              if (!_isDirty || await confirmDiscard(context)) {
+                if (context.mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            onPressed: () => Navigator.pop(context, _controller.text.trim()),
+            child: const Text('Guardar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-          onPressed: () => Navigator.pop(context, _controller.text.trim()),
-          child: const Text('Guardar', style: TextStyle(color: Colors.white)),
-        ),
-      ],
     );
   }
 }

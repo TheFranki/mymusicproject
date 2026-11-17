@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mymusicproject/presentation/error_messages.dart';
+import 'package:mymusicproject/presentation/widgets/app_snack.dart';
 import 'package:mymusicproject/presentation/providers/player_provider.dart';
 import 'package:mymusicproject/presentation/providers/player_controller.dart';
 import 'package:mymusicproject/presentation/providers/local_music_provider.dart';
@@ -39,14 +41,12 @@ class HomeAction {
 
       await ref.read(playerControllerProvider).playContext(songs, song);
     } catch (e, stack) {
-      debugPrint('[HOME ACTION] Error al reproducir: $e');
-      debugPrintStack(stackTrace: stack);
+      logError('HomeAction', e, stack);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al reproducir: $e'),
-            backgroundColor: Colors.red,
-          ),
+        showAppSnack(
+          ScaffoldMessenger.of(context),
+          friendlyError(e, what: 'No se pudo reproducir la canción'),
+          kind: AppSnackKind.error,
         );
       }
     } finally {

@@ -94,6 +94,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     return MaterialApp(
       title: 'Mi Música',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: appMessengerKey,
       theme: buildAppTheme(themeCfg),
       home: const HomeScreen(),
     );

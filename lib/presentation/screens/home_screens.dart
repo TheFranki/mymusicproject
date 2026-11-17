@@ -10,7 +10,7 @@ import 'package:mymusicproject/presentation/widgets/home/home_action.dart';
 import 'package:mymusicproject/presentation/widgets/home/song_list.dart';
 
 import 'player_screen.dart';
-import 'youtube_search_screen.dart';
+import 'package:mymusicproject/presentation/widgets/error_view.dart';
 
 import 'package:mymusicproject/presentation/widgets/player/sleep_timer_sheet.dart';
 import 'package:mymusicproject/presentation/screens/favorites_screen.dart';
@@ -222,11 +222,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                         loading: () =>
                             const Center(child: CircularProgressIndicator()),
-                        error: (error, stack) => Center(
-                          child: Text(
-                            'Error: $error',
-                            style: const TextStyle(color: Colors.red),
-                          ),
+                        error: (error, stack) => ErrorView(
+                          error: error,
+                          what: 'No se pudieron cargar las canciones',
+                          onRetry: () => ref.invalidate(localSongsProvider),
                         ),
                       );
                 },

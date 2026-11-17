@@ -11,10 +11,13 @@ import 'package:mymusicproject/presentation/widgets/player/lyrics_search_service
 import 'package:mymusicproject/presentation/widgets/player/lyrics_sheets.dart';
 import 'package:mymusicproject/presentation/widgets/player/lyrics_sync_dialog.dart';
 
+import 'package:mymusicproject/presentation/error_messages.dart';
+import 'package:mymusicproject/presentation/widgets/app_snack.dart';
+import 'package:mymusicproject/presentation/widgets/error_view.dart';
+
 const int _reactionMs = 250;
 
-mixin LyricsActionsMixin<T extends ConsumerStatefulWidget>
-    on ConsumerState<T> {
+mixin LyricsActionsMixin<T extends ConsumerStatefulWidget> on ConsumerState<T> {
   String get lyricsSongId;
   String get lyricsTitle;
   String get lyricsArtist;
@@ -92,10 +95,8 @@ mixin LyricsActionsMixin<T extends ConsumerStatefulWidget>
         (nextT != null && target >= nextT)) {
       showAppSnack(
         messenger,
-        'No se pudo: esa línea quedaría fuera de orden respecto a otra ya '
-        'fijada. Quita o mueve esa ancla primero.',
-        color: Colors.red,
-        duration: const Duration(seconds: 5),
+        'No hay texto para guardar',
+        kind: AppSnackKind.warning,
       );
       return;
     }
@@ -218,11 +219,7 @@ mixin LyricsActionsMixin<T extends ConsumerStatefulWidget>
 
     resetSubtitles();
     await _saveMeta(
-      previous.copyWith(
-        lyrics: '',
-        lyricsOffsetMs: 0,
-        lyricsAnchors: const {},
-      ),
+      previous.copyWith(lyrics: '', lyricsOffsetMs: 0, lyricsAnchors: const {}),
     );
 
     showAppSnack(
@@ -293,7 +290,7 @@ mixin LyricsActionsMixin<T extends ConsumerStatefulWidget>
           results.isEmpty
               ? 'No se encontró la letra'
               : 'No hay una coincidencia segura. Elige una a mano.',
-          color: Colors.red,
+          kind: AppSnackKind.warning,
           actionLabel: 'Elegir',
           onAction: openLyricsPicker,
           duration: const Duration(seconds: 6),
@@ -327,13 +324,14 @@ mixin LyricsActionsMixin<T extends ConsumerStatefulWidget>
       showAppSnack(
         messenger,
         'No se pudo conectar con el servidor de letras. Intenta de nuevo.',
-        color: Colors.red,
+        kind: AppSnackKind.error,
       );
-    } catch (e) {
+    } catch (e, st) {
+      logError('Letras', e, st);
       showAppSnack(
         messenger,
-        'Error al buscar la letra: $e',
-        color: Colors.red,
+        friendlyError(e, what: 'No se pudo buscar la letra'),
+        kind: AppSnackKind.error,
       );
     } finally {
       if (mounted) setState(() => isSearchingLyrics = false);

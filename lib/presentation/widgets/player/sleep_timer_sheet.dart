@@ -16,7 +16,7 @@ Future<void> showSleepTimerSheet(BuildContext context) {
 class SleepTimerSheet extends ConsumerWidget {
   const SleepTimerSheet({super.key});
 
-  static const _presets = [5, 10, 15, 30, 45, 60, 90, 120];
+  static const _presets = [5, 10, 15, 30, 45, 60, 120];
 
   Future<Duration?> _askCustom(BuildContext context) {
     final controller = TextEditingController();
@@ -107,7 +107,7 @@ class SleepTimerSheet extends ConsumerWidget {
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.edit_outlined),
-              title: const Text('Personalizado…'),
+              title: const Text('Personalizado'),
               onTap: () async {
                 final d = await _askCustom(context);
                 if (d != null && context.mounted) pick(d);

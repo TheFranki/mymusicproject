@@ -7,6 +7,7 @@ import 'package:mymusicproject/data/sources/persistent_image.dart';
 import 'package:mymusicproject/presentation/providers/custom_artwork_provider.dart';
 import 'package:mymusicproject/presentation/providers/player_provider.dart';
 import 'package:mymusicproject/presentation/widgets/app_snack.dart';
+import 'package:mymusicproject/presentation/widgets/discard_guard.dart';
 
 void showEditSongInfoDialog(
   BuildContext context,
@@ -38,102 +39,126 @@ void showEditSongInfoDialog(
     }
   }
 
+  final initialTitle = titleController.text;
+  final initialArtist = artistController.text;
+  final initialArtwork = currentArtwork;
+  bool isDirty() =>
+      titleController.text != initialTitle ||
+      artistController.text != initialArtist ||
+      currentArtwork != initialArtwork;
+
   final messenger = ScaffoldMessenger.of(context);
 
   showDialog(
     context: context,
-    builder: (dialogContext) => StatefulBuilder(
-      builder: (context, setStateModal) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Editar Música',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              GestureDetector(
-                onTap: () => _showImageOptionsBottomSheet(
-                  context,
-                  ref,
-                  titleController.text,
-                  artistController.text,
-                  (newPathOrUrl) =>
-                      setStateModal(() => currentArtwork = newPathOrUrl),
+    barrierDismissible: false,
+    builder: (dialogContext) => DiscardGuard(
+      isDirty: isDirty,
+      child: StatefulBuilder(
+        builder: (context, setStateModal) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1E1E),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            'Editar Música',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: () => _showImageOptionsBottomSheet(
+                    context,
+                    ref,
+                    titleController.text,
+                    artistController.text,
+                    (newPathOrUrl) =>
+                        setStateModal(() => currentArtwork = newPathOrUrl),
+                  ),
+                  child: _buildArtworkPreview(currentArtwork),
                 ),
-                child: _buildArtworkPreview(currentArtwork),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Tocar la imagen para cambiarla.',
-                style: TextStyle(color: Colors.grey, fontSize: 11),
-              ),
-              const SizedBox(height: 20),
-              _buildTextField(
-                controller: titleController,
-                label: 'Nombre de la canción',
-              ),
-              const SizedBox(height: 16),
-              _buildTextField(
-                controller: artistController, 
-                label: 'Artista'),
-              const SizedBox(height: 4),
-            ],
+                const SizedBox(height: 8),
+                const Text(
+                  'Tocar la imagen para cambiarla.',
+                  style: TextStyle(color: Colors.grey, fontSize: 11),
+                ),
+                const SizedBox(height: 20),
+                _buildTextField(
+                  controller: titleController,
+                  label: 'Nombre de la canción',
+                ),
+                const SizedBox(height: 16),
+                _buildTextField(controller: artistController, label: 'Artista'),
+                const SizedBox(height: 4),
+              ],
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blueAccent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                if (!isDirty() || await confirmDiscard(dialogContext)) {
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                }
+              },
+              child: const Text(
+                'Cancelar',
+                style: TextStyle(color: Colors.grey),
               ),
             ),
-            onPressed: () async {
-              final latest = ref.read(customSongMetadataProvider)[songId];
-              final base =
-                  latest ??
-                  SongMetaData(
-                    title: '',
-                    artist: '',
-                    artworkPathOrUrl: '',
-                    lyrics: '',
-                  );
-
-              final newMeta = base.copyWith(
-                title: titleController.text.trim(),
-                artist: artistController.text.trim(),
-                artworkPathOrUrl: currentArtwork,
-              );
-              await ref
-                  .read(customSongMetadataProvider.notifier)
-                  .saveMetadata(songId, newMeta);
-
-              final artworkNotifier = ref.read(customArtworkProvider.notifier);
-              if (currentArtwork.isEmpty) {
-                await artworkNotifier.removeArtwork(songId);
-              } else {
-                await artworkNotifier.setArtwork(songId, currentArtwork);
-              }
-
-              if (dialogContext.mounted) {
-                Navigator.pop(dialogContext);
-              }
-              messenger.showSnackBar(
-                const SnackBar(
-                  content: Text('Información guardada correctamente'),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              );
-            },
-            child: const Text('Guardar', style: TextStyle(color: Colors.white)),
-          ),
-        ],
+              ),
+              onPressed: () async {
+                final latest = ref.read(customSongMetadataProvider)[songId];
+                final base =
+                    latest ??
+                    SongMetaData(
+                      title: '',
+                      artist: '',
+                      artworkPathOrUrl: '',
+                      lyrics: '',
+                    );
+
+                final newMeta = base.copyWith(
+                  title: titleController.text.trim(),
+                  artist: artistController.text.trim(),
+                  artworkPathOrUrl: currentArtwork,
+                );
+                await ref
+                    .read(customSongMetadataProvider.notifier)
+                    .saveMetadata(songId, newMeta);
+
+                final artworkNotifier = ref.read(
+                  customArtworkProvider.notifier,
+                );
+                if (currentArtwork.isEmpty) {
+                  await artworkNotifier.removeArtwork(songId);
+                } else {
+                  await artworkNotifier.setArtwork(songId, currentArtwork);
+                }
+
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext);
+                }
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('Información guardada correctamente'),
+                  ),
+                );
+              },
+              child: const Text(
+                'Guardar',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -246,7 +271,10 @@ void _showImageOptionsBottomSheet(
               if (url != null) {
                 onImageSelected(url);
               } else if (context.mounted) {
-                context.snack('No se encontró imagen.', color: Colors.red);
+                context.snack(
+                  'No se encontró imagen.',
+                  kind: AppSnackKind.error,
+                );
               }
             },
           ),
