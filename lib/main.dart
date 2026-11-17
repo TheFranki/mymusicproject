@@ -92,7 +92,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     final themeCfg = ref.watch(appThemeProvider);
 
     return MaterialApp(
-      title: 'Mi Música',
+      title: 'Lyvo',
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: appMessengerKey,
       theme: buildAppTheme(themeCfg),

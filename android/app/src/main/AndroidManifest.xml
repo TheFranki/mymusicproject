@@ -11,7 +11,7 @@
 
 
     <application
-        android:label="mymusicproject"
+        android:label="Lyvo"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
