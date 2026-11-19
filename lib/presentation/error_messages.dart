@@ -4,15 +4,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-
 String friendlyError(Object error, {String? what}) {
   final reason = _reason(error);
-  final base = what == null ? reason : '$what. $reason';
-  if (!kDebugMode) return base;
-
-  var detail = '${error.runtimeType}: $error';
-  if (detail.length > 140) detail = '${detail.substring(0, 140)}…';
-  return '$base\n[debug] $detail';
+  return what == null ? reason : '$what. $reason';
 }
 
 String _reason(Object e) {

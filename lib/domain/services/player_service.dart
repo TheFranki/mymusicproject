@@ -9,16 +9,23 @@ import 'package:path_provider/path_provider.dart';
 
 import 'audio_handler.dart';
 
+import 'package:mymusicproject/presentation/artwork_baker.dart';
+import 'package:mymusicproject/presentation/providers/artwork_fit_provider.dart';
+
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:http/http.dart' as http;
+
 class PlayerService {
-  PlayerService(this.handler);
+  PlayerService(this.handler, {this.fitFor});
 
   final AppAudioHandler handler;
+  final ArtworkFit? Function(String path)? fitFor;
+
   AudioPlayer get player => handler.player;
 
   Stream<bool> get playingStream => player.playingStream;
   Stream<PlayerState> get playerStateStream => player.playerStateStream;
 
-  // Canción local actual + la siguiente precargada (reproducción sin pausa).
   ConcatenatingAudioSource? _concat;
   Future<void> _preloadChain = Future.value();
 
@@ -80,7 +87,6 @@ class PlayerService {
       thumbnailUrl: thumbnailUrl,
     );
 
-    // El tag (id) permite saber cuál canción está sonando en la lista.
     final concat = ConcatenatingAudioSource(
       useLazyPreparation: false,
       children: [AudioSource.uri(Uri.file(filePath), tag: id)],
@@ -96,8 +102,6 @@ class PlayerService {
     }
   }
 
-  /// Deja exactamente UNA canción después de la actual (o ninguna si
-  /// [id]/[path] son null). Las llamadas se hacen una tras otra.
   Future<void> setPreload(String? id, String? path) {
     final run = _preloadChain.then((_) => _applyPreload(id, path));
     _preloadChain = run.catchError((_) {});
@@ -108,8 +112,6 @@ class PlayerService {
     final c = _concat;
     if (c == null) return;
     final idx = player.currentIndex ?? 0;
-
-    // Si ya está precargada la misma canción, no tocamos nada.
     if (c.length == idx + 2) {
       final existing = c.children[idx + 1];
       if (existing is IndexedAudioSource && existing.tag == id) return;
@@ -123,21 +125,19 @@ class PlayerService {
     }
   }
 
-  /// Actualiza título, artista e imagen de la notificación sin recargar audio.
   Future<void> updateNowPlaying({
     required String id,
     required String title,
     String? author,
     String? thumbnailUrl,
+    bool Function()? isStale,
   }) async {
+    final art = await resolveNotificationArt(thumbnailUrl);
+    if (isStale?.call() ?? false) return;
     final current = handler.mediaItem.value;
     if (current == null || current.id != id) return;
     handler.mediaItem.add(
-      current.copyWith(
-        title: title,
-        artist: author,
-        artUri: await resolveNotificationArt(thumbnailUrl),
-      ),
+      current.copyWith(title: title, artist: author, artUri: art),
     );
   }
 
@@ -146,23 +146,50 @@ class PlayerService {
   Future<void> stop() async => player.stop();
   void dispose() => player.dispose();
 
-  // ---- Imagen de la notificación (Paso 1) ----
-
-  Future<Uri?> resolveNotificationArt(String? source) async {
+    Future<Uri?> resolveNotificationArt(String? source) async {
     try {
       if (source != null && source.isNotEmpty) {
+        File? file;
         if (source.startsWith('http://') || source.startsWith('https://')) {
-          return Uri.parse(source);
+          file = await _cachedRemote(source);
+        } else {
+          final f = File(source);
+          if (await f.exists()) file = f;
         }
-        final file = File(source);
-        if (await file.exists()) {
-          if (source.toLowerCase().endsWith('.gif')) {
-            return await _gifFirstFrame(file) ?? Uri.file(source);
+
+        if (file != null) {
+          final fit = fitFor?.call(source);
+          debugPrint('[Art] $source -> ajuste: ${fit?.toJson()}');
+          if (fit != null && !fit.isIdentity) {
+            final baked = await bakeArtwork(file.path, fit);
+            debugPrint('[Art] recorte: ${baked?.path}');
+            if (baked != null) return baked.uri;
           }
-          return Uri.file(source);
+          if (file.path.toLowerCase().endsWith('.gif')) {
+            return await _gifFirstFrame(file) ?? Uri.file(file.path);
+          }
+          return Uri.file(file.path);
         }
       }
       return await _defaultArt();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<File?> _cachedRemote(String url) async {
+    try {
+      final cache = await getApplicationCacheDirectory();
+      final dir = Directory('${cache.path}/notif_remote');
+      if (!await dir.exists()) await dir.create(recursive: true);
+      final file = File('${dir.path}/${url.hashCode.abs()}');
+      if (await file.exists() && await file.length() > 0) return file;
+
+      final res =
+          await http.get(Uri.parse(url)).timeout(const Duration(seconds: 8));
+      if (res.statusCode != 200 || res.bodyBytes.isEmpty) return null;
+      await file.writeAsBytes(res.bodyBytes);
+      return file;
     } catch (_) {
       return null;
     }

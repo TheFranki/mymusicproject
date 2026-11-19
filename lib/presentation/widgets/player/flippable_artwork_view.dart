@@ -3,15 +3,22 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mymusicproject/presentation/error_messages.dart';
+import 'package:mymusicproject/presentation/providers/lyrics_language_provider.dart';
 import 'package:mymusicproject/presentation/providers/player_provider.dart';
+import 'package:mymusicproject/presentation/screens/languages_screen.dart';
 import 'package:mymusicproject/presentation/widgets/app_snack.dart';
 import 'package:mymusicproject/presentation/widgets/player/lrc_parser.dart';
 import 'package:mymusicproject/presentation/widgets/player/lyrics_row.dart';
 import 'package:mymusicproject/presentation/widgets/player/lyrics_actions_mixin.dart';
+import 'package:mymusicproject/presentation/widgets/player/lyrics_language_detector.dart';
 import 'package:mymusicproject/presentation/widgets/player/lyrics_menus.dart';
+import 'package:mymusicproject/presentation/widgets/player/lyrics_smart_translation.dart';
 import 'package:mymusicproject/presentation/widgets/player/lyrics_timing.dart';
 import 'package:mymusicproject/presentation/widgets/player/lyrics_translation_service.dart';
 import 'package:mymusicproject/presentation/widgets/song_artwork.dart';
+import 'package:mymusicproject/presentation/screens/custom_translation_screen.dart';
+import 'package:mymusicproject/presentation/widgets/player/lyrics_custom_translation.dart';
 
 class FlippableArtworkView extends ConsumerStatefulWidget {
   final String songId;
@@ -55,6 +62,7 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
   String _parsedSource = '';
   List<LyricLine> _parsedLines = const [];
   String _script = 'auto';
+  String? _songLang;
 
   final LyricsTranslationService _translator = LyricsTranslationService();
   String _subMode = 'off';
@@ -138,9 +146,11 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
     if (raw != _parsedSource) {
       _parsedSource = raw;
       _parsedLines = raw.isEmpty ? const [] : parseLrc(raw);
-      _script = raw.isEmpty
-          ? 'auto'
-          : LyricsTranslationService.detectScript(raw);
+      _script = raw.isEmpty ? 'auto' : scriptSummary(raw);
+      // Con varios alfabetos en la misma letra no se oculta ningún idioma.
+      _songLang = (raw.isEmpty || _script == 'multi')
+          ? null
+          : detectLyricsLanguage(raw);
       _effectiveDirty = true;
       _subLines = const [];
       _lineKeys.clear();
@@ -247,6 +257,21 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
     final texts = _sourceTexts();
     if (texts.every((t) => t.trim().isEmpty)) return;
 
+    if (mode == 'my') {
+      final custom =
+          ref
+              .read(customSongMetadataProvider)[widget.songId]
+              ?.customTranslation ??
+          '';
+      if (custom.trim().isEmpty) return;
+      setState(() {
+        _subMode = 'my';
+        _subLines = alignCustomTranslation(texts, custom);
+        _isTranslating = false;
+      });
+      return;
+    }
+
     setState(() {
       _subMode = mode;
       _subLines = const [];
@@ -254,17 +279,25 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
     });
 
     try {
-      final from = LyricsTranslationService.detectScript(texts.join(' '));
       final result = mode == 'rom'
-          ? await _translator.romanize(texts, from: from)
-          : await _translator.translate(texts, mode.substring(3), from: from);
+          ? await _translator.romanizeSmart(texts)
+          : await _translator.translateSmart(texts, mode.substring(3));
 
       if (!mounted || _subMode != mode) return;
       setState(() {
         _subLines = result;
         _isTranslating = false;
       });
-    } catch (e) {
+
+      if (_translator.lastPartial) {
+        showAppSnack(
+          ScaffoldMessenger.of(context),
+          'Sin conexión: se muestran solo las líneas ya traducidas.',
+          kind: AppSnackKind.warning,
+        );
+      }
+    } catch (e, st) {
+      logError('Traducción', e, st);
       if (!mounted || _subMode != mode) return;
       setState(() {
         _subMode = 'off';
@@ -273,14 +306,70 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
       });
       showAppSnack(
         ScaffoldMessenger.of(context),
-        'No se pudo traducir: $e',
-        color: Colors.red,
+        friendlyError(e, what: 'No se pudo traducir la letra'),
+        kind: AppSnackKind.error,
       );
+    }
+  }
+
+  Future<void> _pickMoreLanguage() async {
+    final langs = ref.read(lyricsLangSettingsProvider);
+    final code = await showMoreLanguagesSheet(
+      context,
+      languages: langs.moreFor(_songLang),
+    );
+    if (code != null && mounted) _setSubMode('tr:$code');
+  }
+
+  Future<void> _editCustomTranslation() async {
+    final texts = _sourceTexts();
+    if (texts.every((t) => t.trim().isEmpty)) {
+      showAppSnack(
+        ScaffoldMessenger.of(context),
+        'Primero necesitas una letra para esta canción.',
+        kind: AppSnackKind.warning,
+      );
+      return;
+    }
+    final initial =
+        ref
+            .read(customSongMetadataProvider)[widget.songId]
+            ?.customTranslation ??
+        '';
+
+    final result = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            CustomTranslationScreen(sourceLines: texts, initial: initial),
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    await saveCustomTranslation(result);
+    if (!mounted) return;
+    if (result.isEmpty) {
+      if (_subMode == 'my') _setSubMode('off');
+    } else {
+      _setSubMode('my');
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final langs = ref.watch(lyricsLangSettingsProvider);
+    final hasCustom = ref.watch(
+      customSongMetadataProvider.select(
+        (m) => (m[widget.songId]?.customTranslation ?? '').trim().isNotEmpty,
+      ),
+    );
+
+    if (!langs.customTranslationEnabled && _subMode == 'my') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _subMode == 'my') _setSubMode('off');
+      });
+    }
+
     final offsetMs = ref.watch(
       customSongMetadataProvider.select(
         (m) => m[widget.songId]?.lyricsOffsetMs ?? 0,
@@ -322,6 +411,7 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
 
     return GestureDetector(
       onTap: _toggleFlip,
+
       child: AnimatedBuilder(
         animation: _animation,
         builder: (context, child) {
@@ -337,7 +427,7 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
                 ? Transform(
                     transform: Matrix4.identity()..rotateY(pi),
                     alignment: Alignment.center,
-                    child: _buildLyricsBack(rawLyrics, lines),
+                    child: _buildLyricsBack(rawLyrics, lines, langs, hasCustom),
                   )
                 : _buildArtworkFront(),
           );
@@ -400,7 +490,12 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
     );
   }
 
-  Widget _buildLyricsBack(String rawLyrics, List<LyricLine> lines) {
+  Widget _buildLyricsBack(
+    String rawLyrics,
+    List<LyricLine> lines,
+    LyricsLangSettings langs,
+    bool hasCustom,
+  ) {
     final isSynced = lines.isNotEmpty;
 
     Widget content;
@@ -534,7 +629,19 @@ class _FlippableArtworkViewState extends ConsumerState<FlippableArtworkView>
                             LyricsTranslateMenu(
                               mode: _subMode,
                               script: _script,
+                              languages: langs.visibleFor(_songLang),
+                              showRomanization: langs.showRomanization,
+                              hasCustom: hasCustom,
+                              customEnabled: langs.customTranslationEnabled,
+                              onEditCustom: _editCustomTranslation,
                               onSelected: _setSubMode,
+                              onMore: _pickMoreLanguage,
+                              onSettings: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const LanguagesScreen(),
+                                ),
+                              ),
                             ),
                           LyricsSearchMenu(
                             hasLyrics: rawLyrics.isNotEmpty,

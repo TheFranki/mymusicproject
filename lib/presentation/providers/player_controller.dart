@@ -185,6 +185,7 @@ class PlayerController {
   final Ref ref;
   int _token = 0;
   int _failStreak = 0;
+  int _refreshToken = 0;
   bool _restored = false;
   final List<String> _recentYoutube = [];
   String? _relatedFor;
@@ -497,6 +498,7 @@ class PlayerController {
   }
 
   Future<void> refreshNowPlaying() async {
+    final token = ++_refreshToken;
     final current = ref.read(currentSongProvider);
     if (current == null) return;
     final song = _resolve(current);
@@ -507,6 +509,7 @@ class PlayerController {
           title: song['title']!,
           author: song['author'],
           thumbnailUrl: song['thumbnail'],
+          isStale: () => token != _refreshToken,
         );
   }
 
@@ -746,7 +749,7 @@ class PlayerController {
     }
   }
 
-    Future<void> _handlePlayFailure(
+  Future<void> _handlePlayFailure(
     Map<String, String> song,
     bool autoPlay,
   ) async {

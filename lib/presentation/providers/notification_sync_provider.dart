@@ -7,6 +7,8 @@ import 'youtube_favorites_provider.dart';
 import 'custom_artwork_provider.dart';
 import 'player_controller.dart';
 
+import 'artwork_fit_provider.dart';
+
 final notificationSyncProvider = Provider<void>((ref) {
   final handler = ref.read(audioHandlerProvider);
 
@@ -40,6 +42,10 @@ final notificationSyncProvider = Provider<void>((ref) {
   );
   ref.listen(
     customSongMetadataProvider,
+    (_, _) => ref.read(playerControllerProvider).refreshNowPlaying(),
+  );
+  ref.listen(
+    artworkFitProvider,
     (_, _) => ref.read(playerControllerProvider).refreshNowPlaying(),
   );
   sync();

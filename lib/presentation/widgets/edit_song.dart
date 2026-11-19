@@ -9,6 +9,14 @@ import 'package:mymusicproject/presentation/providers/player_provider.dart';
 import 'package:mymusicproject/presentation/widgets/app_snack.dart';
 import 'package:mymusicproject/presentation/widgets/discard_guard.dart';
 
+import 'package:mymusicproject/presentation/providers/artwork_fit_provider.dart';
+import 'package:mymusicproject/presentation/screens/adjust_artwork_screen.dart';
+import 'package:mymusicproject/presentation/widgets/song_artwork.dart';
+
+import 'package:mymusicproject/presentation/providers/player_controller.dart';
+
+import 'package:mymusicproject/presentation/image_download.dart';
+
 void showEditSongInfoDialog(
   BuildContext context,
   WidgetRef ref,
@@ -42,10 +50,16 @@ void showEditSongInfoDialog(
   final initialTitle = titleController.text;
   final initialArtist = artistController.text;
   final initialArtwork = currentArtwork;
+  ArtworkFit? currentFit = ref.read(artworkFitProvider)[currentArtwork];
+  final initialFit = currentFit;
+  bool sameFit(ArtworkFit? a, ArtworkFit? b) =>
+      (a ?? const ArtworkFit()) == (b ?? const ArtworkFit());
+
   bool isDirty() =>
       titleController.text != initialTitle ||
       artistController.text != initialArtist ||
-      currentArtwork != initialArtwork;
+      currentArtwork != initialArtwork ||
+      !sameFit(currentFit, initialFit);
 
   final messenger = ScaffoldMessenger.of(context);
 
@@ -74,10 +88,29 @@ void showEditSongInfoDialog(
                     ref,
                     titleController.text,
                     artistController.text,
-                    (newPathOrUrl) =>
-                        setStateModal(() => currentArtwork = newPathOrUrl),
+                    hasImage: currentArtwork.isNotEmpty,
+                    onAdjust: () => _adjustArtwork(
+                      context,
+                      currentArtwork,
+                      currentFit,
+                      (f) => setStateModal(() => currentFit = f),
+                    ),
+                    onImageSelected: (newPathOrUrl) {
+                      setStateModal(() {
+                        currentArtwork = newPathOrUrl;
+                        currentFit = null;
+                      });
+                      if (newPathOrUrl.isNotEmpty) {
+                        _adjustArtwork(
+                          context,
+                          newPathOrUrl,
+                          null,
+                          (f) => setStateModal(() => currentFit = f),
+                        );
+                      }
+                    },
                   ),
-                  child: _buildArtworkPreview(currentArtwork),
+                  child: _buildArtworkPreview(currentArtwork, currentFit),
                 ),
                 const SizedBox(height: 8),
                 const Text(
@@ -137,8 +170,11 @@ void showEditSongInfoDialog(
                 final artworkNotifier = ref.read(
                   customArtworkProvider.notifier,
                 );
-                if (currentArtwork.isEmpty) {
-                  await artworkNotifier.removeArtwork(songId);
+                if (currentArtwork.isNotEmpty) {
+                  await ref
+                      .read(artworkFitProvider.notifier)
+                      .setFit(currentArtwork, currentFit ?? const ArtworkFit());
+                  await ref.read(playerControllerProvider).refreshNowPlaying();
                 } else {
                   await artworkNotifier.setArtwork(songId, currentArtwork);
                 }
@@ -164,41 +200,16 @@ void showEditSongInfoDialog(
   );
 }
 
-Widget _buildArtworkPreview(String currentArtwork) {
+Widget _buildArtworkPreview(String currentArtwork, ArtworkFit? fit) {
   return Stack(
     alignment: Alignment.center,
     children: [
-      Container(
+      SongArtwork(
+        artworkPathOrUrl: currentArtwork,
         width: 110,
         height: 110,
-        decoration: BoxDecoration(
-          color: Colors.grey.shade800,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: currentArtwork.isNotEmpty
-              ? (currentArtwork.startsWith('http')
-                    ? Image.network(
-                        currentArtwork,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const Icon(
-                          Icons.music_note,
-                          color: Colors.white54,
-                          size: 50,
-                        ),
-                      )
-                    : Image.file(
-                        File(currentArtwork),
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const Icon(
-                          Icons.music_note,
-                          color: Colors.white54,
-                          size: 50,
-                        ),
-                      ))
-              : const Icon(Icons.music_note, color: Colors.white54, size: 50),
-        ),
+        borderRadius: 12,
+        fitOverride: fit,
       ),
       Container(
         width: 110,
@@ -243,9 +254,11 @@ void _showImageOptionsBottomSheet(
   BuildContext context,
   WidgetRef ref,
   String title,
-  String artist,
-  Function(String) onImageSelected,
-) {
+  String artist, {
+  required bool hasImage,
+  required VoidCallback onAdjust,
+  required Function(String) onImageSelected,
+}) {
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.grey.shade900,
@@ -255,6 +268,17 @@ void _showImageOptionsBottomSheet(
     builder: (modalContext) => SafeArea(
       child: Wrap(
         children: [
+          if (hasImage)
+            ListTile(
+              title: const Text(
+                'Ajustar posición y zoom',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () {
+                Navigator.pop(modalContext);
+                onAdjust();
+              },
+            ),
           ListTile(
             title: const Text(
               'Búsqueda automática',
@@ -268,11 +292,21 @@ void _showImageOptionsBottomSheet(
               final url = await ref
                   .read(ytExtractorProvider)
                   .searchThumbnailForSong(title, artist);
-              if (url != null) {
-                onImageSelected(url);
+              if (url == null) {
+                if (context.mounted) {
+                  context.snack(
+                    'No se encontró imagen.',
+                    kind: AppSnackKind.warning,
+                  );
+                }
+                return;
+              }
+              final local = await downloadImageToLocal(url);
+              if (local != null) {
+                onImageSelected(local);
               } else if (context.mounted) {
                 context.snack(
-                  'No se encontró imagen.',
+                  'No se pudo descargar la imagen. Revisa tu conexión.',
                   kind: AppSnackKind.error,
                 );
               }
@@ -311,4 +345,20 @@ void _showImageOptionsBottomSheet(
       ),
     ),
   );
+}
+
+Future<void> _adjustArtwork(
+  BuildContext context,
+  String path,
+  ArtworkFit? initial,
+  void Function(ArtworkFit) onResult,
+) async {
+  if (path.isEmpty) return;
+  final fit = await Navigator.push<ArtworkFit>(
+    context,
+    MaterialPageRoute(
+      builder: (_) => AdjustArtworkScreen(path: path, initial: initial),
+    ),
+  );
+  if (fit != null) onResult(fit);
 }

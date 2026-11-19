@@ -2,6 +2,7 @@ import 'dart:math' show max;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mymusicproject/presentation/error_messages.dart';
 import 'package:mymusicproject/presentation/providers/player_controller.dart';
 import 'package:mymusicproject/presentation/providers/player_provider.dart';
 import 'package:mymusicproject/presentation/widgets/app_snack.dart';
@@ -10,10 +11,6 @@ import 'package:mymusicproject/presentation/widgets/player/lyrics_dialogs.dart';
 import 'package:mymusicproject/presentation/widgets/player/lyrics_search_service.dart';
 import 'package:mymusicproject/presentation/widgets/player/lyrics_sheets.dart';
 import 'package:mymusicproject/presentation/widgets/player/lyrics_sync_dialog.dart';
-
-import 'package:mymusicproject/presentation/error_messages.dart';
-import 'package:mymusicproject/presentation/widgets/app_snack.dart';
-import 'package:mymusicproject/presentation/widgets/error_view.dart';
 
 const int _reactionMs = 250;
 
@@ -56,6 +53,9 @@ mixin LyricsActionsMixin<T extends ConsumerStatefulWidget> on ConsumerState<T> {
     ),
   );
 
+  Future<void> saveCustomTranslation(String text) =>
+      _saveMeta(baseMeta().copyWith(customTranslation: text));
+
   Future<void> changeOffset(int ms) {
     final clamped = ms.clamp(-60000, 60000).toInt();
     return _saveMeta(baseMeta().copyWith(lyricsOffsetMs: clamped));
@@ -95,8 +95,10 @@ mixin LyricsActionsMixin<T extends ConsumerStatefulWidget> on ConsumerState<T> {
         (nextT != null && target >= nextT)) {
       showAppSnack(
         messenger,
-        'No hay texto para guardar',
+        'No se pudo: esa línea quedaría fuera de orden respecto a otra ya '
+        'fijada. Quita o mueve esa ancla primero.',
         kind: AppSnackKind.warning,
+        duration: const Duration(seconds: 5),
       );
       return;
     }
@@ -154,32 +156,96 @@ mixin LyricsActionsMixin<T extends ConsumerStatefulWidget> on ConsumerState<T> {
     final messenger = ScaffoldMessenger.of(context);
     final previous = baseMeta();
     final current = previous.lyrics;
+    final oldLines = parseLrc(current);
+    final oldRaw = [for (final l in oldLines) l.timestamp.inMilliseconds];
+    final oldText = [for (final l in oldLines) l.text];
+    final anchors = previous.lyricsAnchors;
+    final offset = lyricsOffset;
 
     final edited = await showEditLyricsDialog(
       context,
       initial: current,
       currentPosition: () {
-        final p =
-            ref.read(playerServiceProvider).player.position -
-            Duration(milliseconds: lyricsOffset);
-        return p.isNegative ? Duration.zero : p;
+        final posMs = ref
+            .read(playerServiceProvider)
+            .player
+            .position
+            .inMilliseconds;
+        final raw = _rawForEffective(oldRaw, anchors, posMs - offset);
+        return Duration(milliseconds: raw < 0 ? 0 : raw);
       },
     );
     if (edited == null || edited.isEmpty || edited == current.trim()) return;
-    final sameShape = parseLrc(edited).length == parseLrc(current).length;
+
+    final newLines = parseLrc(edited);
+    final newAnchors = _remapAnchors(
+      anchors: anchors,
+      oldRaw: oldRaw,
+      oldText: oldText,
+      newRaw: [for (final l in newLines) l.timestamp.inMilliseconds],
+      newText: [for (final l in newLines) l.text],
+    );
+    final lost = anchors.length - newAnchors.length;
+
     await _saveMeta(
-      previous.copyWith(
-        lyrics: edited,
-        lyricsAnchors: sameShape ? previous.lyricsAnchors : const {},
-      ),
+      previous.copyWith(lyrics: edited, lyricsAnchors: newAnchors),
     );
     showAppSnack(
       messenger,
-      'Letra actualizada',
+      lost > 0
+          ? 'Letra actualizada ($lost ancla${lost == 1 ? '' : 's'} quitada${lost == 1 ? '' : 's'} por líneas editadas)'
+          : 'Letra actualizada',
       actionLabel: 'Deshacer',
       onAction: () => _saveMeta(previous),
       duration: const Duration(seconds: 4),
     );
+  }
+
+  int _rawForEffective(List<int> orig, Map<int, int> anchors, int effMs) {
+    final n = orig.length;
+    final idx = anchors.keys.where((i) => i >= 0 && i < n).toList()..sort();
+    if (idx.isEmpty) return effMs;
+
+    int target(int i) => anchors[i]!;
+    final first = idx.first, last = idx.last;
+
+    if (effMs <= target(first)) return effMs - (target(first) - orig[first]);
+    if (effMs >= target(last)) return effMs - (target(last) - orig[last]);
+    for (var k = 0; k < idx.length - 1; k++) {
+      final a = idx[k], b = idx[k + 1];
+      final ta = target(a), tb = target(b);
+      if (effMs >= ta && effMs <= tb) {
+        if (tb == ta) return orig[a];
+        return orig[a] +
+            ((effMs - ta) * (orig[b] - orig[a]) / (tb - ta)).round();
+      }
+    }
+    return effMs;
+  }
+
+  Map<int, int> _remapAnchors({
+    required Map<int, int> anchors,
+    required List<int> oldRaw,
+    required List<String> oldText,
+    required List<int> newRaw,
+    required List<String> newText,
+  }) {
+    if (anchors.isEmpty) return const {};
+    final used = <int>{};
+    final out = <int, int>{};
+    for (final e in anchors.entries) {
+      final i = e.key;
+      if (i < 0 || i >= oldRaw.length) continue;
+      for (var j = 0; j < newRaw.length; j++) {
+        if (used.contains(j)) continue;
+        if (newRaw[j] == oldRaw[i] && newText[j].trim() == oldText[i].trim()) {
+          used.add(j);
+          out[j] = e.value;
+          break;
+        }
+      }
+    }
+    return out;
   }
 
   Future<void> deleteLyrics() async {
@@ -369,7 +435,11 @@ mixin LyricsActionsMixin<T extends ConsumerStatefulWidget> on ConsumerState<T> {
 
     final r = lyricsFromPastedText(text, durationSec: _songDurationSec());
     if (r == null) {
-      showAppSnack(messenger, 'No hay texto para guardar', color: Colors.red);
+      showAppSnack(
+        messenger,
+        'No hay texto para guardar',
+        kind: AppSnackKind.warning,
+      );
       return;
     }
 

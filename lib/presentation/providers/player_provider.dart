@@ -11,12 +11,17 @@ import 'package:mymusicproject/presentation/widgets/player/lyrics_search_service
 
 import '../../domain/services/audio_handler.dart';
 
+import 'artwork_fit_provider.dart';
+
 final lyricsSearchProvider = Provider((ref) => LyricsSearchService());
 final audioHandlerProvider = Provider<AppAudioHandler>(
   (ref) => throw UnimplementedError('Se inicializa en main()'),
 );
 final playerServiceProvider = Provider(
-  (ref) => PlayerService(ref.watch(audioHandlerProvider)),
+  (ref) => PlayerService(
+    ref.watch(audioHandlerProvider),
+    fitFor: (path) => ref.read(artworkFitProvider)[path],
+  ),
 );
 final localAudioServiceProvider = Provider((ref) => LocalAudioService());
 final ytExtractorProvider = Provider((ref) => YouTubeExtractorService());
@@ -58,6 +63,7 @@ class SongMetaData {
   final int lyricsOffsetMs;
   final String lyricsQuery;
   final Map<int, int> lyricsAnchors;
+  final String customTranslation;
 
   SongMetaData({
     required this.title,
@@ -67,6 +73,7 @@ class SongMetaData {
     this.lyricsOffsetMs = 0,
     this.lyricsQuery = '',
     this.lyricsAnchors = const {},
+    this.customTranslation = '',
   });
 
   SongMetaData copyWith({
@@ -77,6 +84,7 @@ class SongMetaData {
     int? lyricsOffsetMs,
     String? lyricsQuery,
     Map<int, int>? lyricsAnchors,
+    String? customTranslation,
   }) => SongMetaData(
     title: title ?? this.title,
     artist: artist ?? this.artist,
@@ -85,6 +93,7 @@ class SongMetaData {
     lyricsOffsetMs: lyricsOffsetMs ?? this.lyricsOffsetMs,
     lyricsQuery: lyricsQuery ?? this.lyricsQuery,
     lyricsAnchors: lyricsAnchors ?? this.lyricsAnchors,
+    customTranslation: customTranslation ?? this.customTranslation,
   );
 
   Map<String, dynamic> toMap() => {
@@ -97,6 +106,7 @@ class SongMetaData {
     'lyricsAnchors': {
       for (final e in lyricsAnchors.entries) '${e.key}': e.value,
     },
+    'customTranslation': customTranslation,
   };
 
   factory SongMetaData.fromMap(Map<String, dynamic> map) {
@@ -117,6 +127,7 @@ class SongMetaData {
       lyricsOffsetMs: (map['lyricsOffsetMs'] as num?)?.toInt() ?? 0,
       lyricsQuery: map['lyricsQuery'] ?? '',
       lyricsAnchors: anchors,
+      customTranslation: map['customTranslation'] ?? '',
     );
   }
 }

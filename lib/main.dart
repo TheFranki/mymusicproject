@@ -16,6 +16,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:mymusicproject/presentation/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 
+import 'package:mymusicproject/presentation/providers/artwork_fit_provider.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(
@@ -38,12 +40,14 @@ Future<void> main() async {
     ),
   );
 
+  final savedFits = await ArtworkFitNotifier.loadSaved();
   final savedTheme = await AppThemeNotifier.loadSaved();
   runApp(
     ProviderScope(
       overrides: [
         audioHandlerProvider.overrideWithValue(handler),
         appThemeProvider.overrideWith((ref) => AppThemeNotifier(savedTheme)),
+        artworkFitProvider.overrideWith((ref) => ArtworkFitNotifier(savedFits)),
       ],
       child: const MyApp(),
     ),

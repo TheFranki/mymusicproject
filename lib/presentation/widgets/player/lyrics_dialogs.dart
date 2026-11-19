@@ -181,7 +181,8 @@ class _LyricsPickerDialogState extends State<_LyricsPickerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final height = MediaQuery.of(context).size.height * 0.5;
+    final mq = MediaQuery.of(context);
+    final height = (mq.size.height - mq.viewInsets.bottom) * 0.45;
 
     Widget body;
     if (_loading) {
@@ -296,9 +297,12 @@ class _PasteLyricsDialogState extends State<_PasteLyricsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+
     return DiscardGuard(
       isDirty: () => _isDirty,
       child: AlertDialog(
+        scrollable: true,
         backgroundColor: const Color(0xFF1E1E1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
@@ -320,8 +324,8 @@ class _PasteLyricsDialogState extends State<_PasteLyricsDialog> {
               const SizedBox(height: 10),
               TextField(
                 controller: _controller,
-                maxLines: 10,
-                minLines: 6,
+                minLines: keyboardOpen ? 3 : 6,
+                maxLines: keyboardOpen ? 6 : 10,
                 style: const TextStyle(color: Colors.white, fontSize: 13),
                 decoration: InputDecoration(
                   hintText: 'Pega aquí la letra…',
@@ -436,9 +440,12 @@ class _EditLyricsDialogState extends State<_EditLyricsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+
     return DiscardGuard(
       isDirty: () => _isDirty,
       child: AlertDialog(
+        scrollable: true,
         backgroundColor: const Color(0xFF1E1E1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
@@ -452,7 +459,7 @@ class _EditLyricsDialogState extends State<_EditLyricsDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Cada línea con tiempo se ve como texto.'
+                'Cada línea con tiempo se ve como texto. '
                 'Para marcar una pausa instrumental, escucha la canción hasta '
                 'ese punto, pon el cursor y toca "Insertar ♪": se guarda con '
                 'el tiempo actual.',
@@ -461,8 +468,8 @@ class _EditLyricsDialogState extends State<_EditLyricsDialog> {
               const SizedBox(height: 10),
               TextField(
                 controller: _controller,
-                maxLines: 12,
-                minLines: 8,
+                minLines: keyboardOpen ? 3 : 8,
+                maxLines: keyboardOpen ? 6 : 12,
                 style: const TextStyle(color: Colors.white, fontSize: 13),
                 decoration: InputDecoration(
                   enabledBorder: OutlineInputBorder(
