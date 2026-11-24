@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../providers/saved_palettes_provider.dart';
 
 Future<Color?> showColorPickerDialog(
   BuildContext context, {
@@ -12,16 +15,16 @@ Future<Color?> showColorPickerDialog(
   );
 }
 
-class _ColorPickerDialog extends StatefulWidget {
+class _ColorPickerDialog extends ConsumerStatefulWidget {
   const _ColorPickerDialog({required this.initial, required this.maxValue});
   final Color initial;
   final double maxValue;
 
   @override
-  State<_ColorPickerDialog> createState() => _ColorPickerDialogState();
+  ConsumerState<_ColorPickerDialog> createState() => _ColorPickerDialogState();
 }
 
-class _ColorPickerDialogState extends State<_ColorPickerDialog> {
+class _ColorPickerDialogState extends ConsumerState<_ColorPickerDialog> {
   late HSVColor _hsv;
   late final TextEditingController _hex;
 
@@ -99,6 +102,65 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
     );
   }
 
+  Widget _savedColors() {
+    final saved = ref.watch(savedColorsProvider);
+    final notifier = ref.read(savedColorsProvider.notifier);
+    final current = _hsv.toColor();
+    final alreadySaved = saved.any((c) => c.toARGB32() == current.toARGB32());
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Mis colores', style: Theme.of(context).textTheme.labelMedium),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: alreadySaved ? null : () => notifier.add(current),
+              icon: Icon(
+                alreadySaved ? Icons.bookmark : Icons.bookmark_add_outlined,
+                size: 16,
+              ),
+              label: Text(alreadySaved ? 'Guardado' : 'Guardar'),
+            ),
+          ],
+        ),
+        if (saved.isEmpty)
+          const Text(
+            'Guarda colores para usarlos después.',
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          )
+        else ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final c in saved)
+                GestureDetector(
+                  onTap: () => _setHsv(HSVColor.fromColor(c)),
+                  onLongPress: () => notifier.remove(c),
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: c,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white38),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Mantén pulsado un color para borrarlo.',
+            style: TextStyle(color: Colors.grey, fontSize: 11),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final h = _hsv.hue, s = _hsv.saturation, v = _hsv.value;
@@ -172,6 +234,8 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
                 }
               },
             ),
+            const SizedBox(height: 8),
+            _savedColors(),
           ],
         ),
       ),

@@ -5,6 +5,8 @@ import '../theme/app_theme.dart';
 import '../widgets/color_picker_dialog.dart';
 import '../widgets/song_artwork.dart';
 import '../widgets/song_row_frame.dart';
+import '../providers/saved_palettes_provider.dart';
+import '../widgets/app_snack.dart';
 
 class ColorsScreen extends ConsumerStatefulWidget {
   const ColorsScreen({super.key});
@@ -108,9 +110,72 @@ class _ColorsScreenState extends ConsumerState<ColorsScreen> {
     if (c != null) _set(_draft.copyWith(name: 'Personalizado', rowColor: c));
   }
 
+  Future<void> _saveCurrentPalette() async {
+    final count = ref.read(savedPalettesProvider).length;
+    final controller = TextEditingController(text: 'Mi paleta ${count + 1}');
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Guardar paleta'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 24,
+          decoration: const InputDecoration(labelText: 'Nombre'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final t = controller.text.trim();
+              if (t.isNotEmpty) Navigator.pop(ctx, t);
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    if (name == null || !mounted) return;
+    ref.read(savedPalettesProvider.notifier).add(_draft.copyWith(name: name));
+    showAppSnack(
+      ScaffoldMessenger.of(context),
+      'Paleta "$name" guardada',
+      kind: AppSnackKind.success,
+    );
+  }
+
+  Future<void> _deleteSavedPalette(int index) async {
+    final list = ref.read(savedPalettesProvider);
+    if (index < 0 || index >= list.length) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('¿Borrar "${list[index].name}"?'),
+        content: const Text('Se eliminará de tus paletas guardadas.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Borrar'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      ref.read(savedPalettesProvider.notifier).removeAt(index);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final d = _draft;
+    final savedPalettes = ref.watch(savedPalettesProvider);
 
     return PopScope(
       canPop: !_dirty,
@@ -156,6 +221,40 @@ class _ColorsScreenState extends ConsumerState<ColorsScreen> {
                               ),
                             ),
                         ],
+                      ),
+
+                      const _SectionTitle('Mis paletas'),
+                      if (savedPalettes.isEmpty)
+                        const Text(
+                          'Aún no guardas ninguna. Personaliza los colores y '
+                          'pulsa "Guardar paleta actual".',
+                          style: TextStyle(color: Colors.grey, fontSize: 12),
+                        )
+                      else ...[
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            for (var i = 0; i < savedPalettes.length; i++)
+                              _PresetTile(
+                                preset: savedPalettes[i],
+                                selected: savedPalettes[i].sameLook(d),
+                                onTap: () => _set(savedPalettes[i]),
+                                onLongPress: () => _deleteSavedPalette(i),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Mantén pulsada una paleta para borrarla.',
+                          style: TextStyle(color: Colors.grey, fontSize: 11),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: _saveCurrentPalette,
+                        icon: const Icon(Icons.bookmark_add_outlined),
+                        label: const Text('Guardar paleta actual'),
                       ),
 
                       const _SectionTitle('Color de acento'),
@@ -269,8 +368,7 @@ class _ColorsScreenState extends ConsumerState<ColorsScreen> {
                           for (final c in _accents)
                             _Dot(
                               color: c,
-                              selected:
-                                  d.rowColor?.toARGB32() == c.toARGB32(),
+                              selected: d.rowColor?.toARGB32() == c.toARGB32(),
                               size: 30,
                               onTap: () => _set(
                                 d.copyWith(name: 'Personalizado', rowColor: c),
@@ -331,15 +429,13 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 22, bottom: 10),
-        child: Text(
-          text,
-          style: Theme.of(context)
-              .textTheme
-              .titleMedium
-              ?.copyWith(fontWeight: FontWeight.bold),
-        ),
-      );
+    padding: const EdgeInsets.only(top: 22, bottom: 10),
+    child: Text(
+      text,
+      style: Theme.of(context).textTheme.titleMedium
+          ?.copyWith(fontWeight: FontWeight.bold),
+    ),
+  );
 }
 
 class _Preview extends StatelessWidget {
@@ -407,15 +503,18 @@ class _PresetTile extends StatelessWidget {
     required this.preset,
     required this.selected,
     required this.onTap,
+    this.onLongPress,
   });
   final AppThemeConfig preset;
   final bool selected;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Container(
         width: 104,
         height: 72,
@@ -536,32 +635,32 @@ class _RowPreview extends StatelessWidget {
   final AppThemeConfig cfg;
 
   Widget _row(String title, {required bool playing}) => SongRowFrame(
-        cfg: cfg,
-        isPlaying: playing,
-        child: ListTile(
-          leading: buildSongArtwork(artworkPathOrUrl: null),
-          title: Text(
-            title,
-            style: TextStyle(
-              color: playing ? cfg.lineTextColor : Colors.white,
-              fontSize: 14,
-              fontWeight: playing ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
-          subtitle: const Text(
-            'Artista',
-            style: TextStyle(color: Colors.grey, fontSize: 12),
-          ),
-          trailing: const Icon(Icons.more_vert, color: Colors.grey),
+    cfg: cfg,
+    isPlaying: playing,
+    child: ListTile(
+      leading: buildSongArtwork(artworkPathOrUrl: null),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: playing ? cfg.lineTextColor : Colors.white,
+          fontSize: 14,
+          fontWeight: playing ? FontWeight.bold : FontWeight.normal,
         ),
-      );
+      ),
+      subtitle: const Text(
+        'Artista',
+        style: TextStyle(color: Colors.grey, fontSize: 12),
+      ),
+      trailing: const Icon(Icons.more_vert, color: Colors.grey),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) => Column(
-        children: [
-          _row('Canción 1', playing: false),
-          _row('Sonando ahora', playing: true),
-          _row('Canción 3', playing: false),
-        ],
-      );
+    children: [
+      _row('Canción 1', playing: false),
+      _row('Sonando ahora', playing: true),
+      _row('Canción 3', playing: false),
+    ],
+  );
 }

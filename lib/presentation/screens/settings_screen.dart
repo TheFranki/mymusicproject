@@ -6,6 +6,13 @@ import '../widgets/app_scaffold.dart';
 import 'colors_screen.dart';
 import 'languages_screen.dart';
 
+import 'background_screen.dart';
+
+import 'package:mymusicproject/presentation/screens/splash_screen.dart';
+
+import 'splash_settings_screen.dart';
+import 'library_screen.dart';
+
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -70,12 +77,39 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           entry(
+            icon: Icons.rocket_launch_outlined,
+            title: 'Pantalla de inicio',
+            subtitle: 'Color de la animación al abrir la app',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SplashSettingsScreen()),
+            ),
+          ),
+          entry(
             icon: Icons.translate,
             title: 'Idiomas',
             subtitle: 'Idiomas que aparecen al traducir las letras',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const LanguagesScreen()),
+            ),
+          ),
+          entry(
+            icon: Icons.library_music_outlined,
+            title: 'Biblioteca',
+            subtitle: 'Ocultar audios cortos, de mensajería y grabaciones',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const LibraryScreen()),
+            ),
+          ),
+          entry(
+            icon: Icons.battery_saver_outlined,
+            title: 'Segundo plano',
+            subtitle: 'Evita cierres de la música y ve por qué se cerró la app',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const BackgroundScreen()),
             ),
           ),
         ],

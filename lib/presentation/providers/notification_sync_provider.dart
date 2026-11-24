@@ -33,7 +33,15 @@ final notificationSyncProvider = Provider<void>((ref) {
 
   ref.listen(isShuffleEnabledProvider, (_, _) => sync());
   ref.listen(repeatModeProvider, (_, _) => sync());
-  ref.listen(currentSongProvider, (_, _) => sync());
+  ref.listen(currentSongProvider, (_, _) {
+    sync();
+    Future.delayed(const Duration(seconds: 1), () {
+      final cur = ref.read(currentSongProvider);
+      if (cur != null && handler.mediaItem.value?.id != cur['id']) {
+        ref.read(playerControllerProvider).refreshNowPlaying();
+      }
+    });
+  });
   ref.listen(favoritesIdsProvider, (_, _) => sync());
   ref.listen(youtubeFavoritesProvider, (_, _) => sync());
   ref.listen(

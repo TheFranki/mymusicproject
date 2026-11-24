@@ -360,7 +360,13 @@ class PlayerController {
 
     final q = await _loadQueue(song['id']!);
     if (q != null) _setQueue(q);
-    await _play(song, startAt: position, autoPlay: false);
+    if (ref.read(playerServiceProvider).player.playing) {
+      _startPositionSaver();
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final resume = prefs.getBool('resume_on_open') ?? false;
+    await _play(song, startAt: position, autoPlay: resume);
     _startPositionSaver();
     unawaited(ensureRelated());
   }
@@ -509,7 +515,9 @@ class PlayerController {
           title: song['title']!,
           author: song['author'],
           thumbnailUrl: song['thumbnail'],
-          isStale: () => token != _refreshToken,
+          isStale: () =>
+              token != _refreshToken ||
+              ref.read(currentSongProvider)?['id'] != song['id'],
         );
   }
 
@@ -783,5 +791,13 @@ class PlayerController {
     await service.pause();
     final currentSong = ref.read(currentSongProvider);
     await savePlaybackState(currentSong, service.player.position);
+  }
+
+  Future<void> saveNow() async {
+    final song = ref.read(currentSongProvider);
+    if (song == null) return;
+    final player = ref.read(playerServiceProvider).player;
+    await savePlaybackState(song, player.position);
+    await _persistQueue();
   }
 }

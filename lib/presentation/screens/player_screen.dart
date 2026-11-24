@@ -42,7 +42,7 @@ class PlayerScreen extends ConsumerWidget {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          if (songPath.isNotEmpty || currentSong['id'] != null) 
+          if (songPath.isNotEmpty || currentSong['id'] != null)
             _buildOptionsMenu(context, ref, songPath, isLocal),
         ],
       ),
@@ -72,7 +72,9 @@ class PlayerScreen extends ConsumerWidget {
             ref.read(favoritesIdsProvider.notifier).toggleFavorite(songPath);
           } else {
             if (currentSong != null) {
-              ref.read(youtubeFavoritesProvider.notifier).toggleFavorite(currentSong);
+              ref
+                  .read(youtubeFavoritesProvider.notifier)
+                  .toggleFavorite(currentSong);
             }
           }
           ScaffoldMessenger.of(context).showSnackBar(
@@ -85,12 +87,18 @@ class PlayerScreen extends ConsumerWidget {
           );
         } else if (value == 'playlist') {
           final effectiveSong = ref.read(effectiveCurrentSongProvider);
-          
+
           if (currentSong != null) {
             final songData = {
               'id': currentSong['id'] ?? '',
-              'title': effectiveSong?['title'] ?? currentSong['title'] ?? 'Sin título',
-              'author': effectiveSong?['author'] ?? currentSong['author'] ?? 'Desconocido',
+              'title':
+                  effectiveSong?['title'] ??
+                  currentSong['title'] ??
+                  'Sin título',
+              'author':
+                  effectiveSong?['author'] ??
+                  currentSong['author'] ??
+                  'Desconocido',
               'thumbnail': currentSong['thumbnail'] ?? '',
               'isLocal': currentSong['isLocal'] ?? 'false',
               'data': songPath,
@@ -102,7 +110,23 @@ class PlayerScreen extends ConsumerWidget {
               showAddToYoutubePlaylistDialog(context, ref, songData);
             }
           }
-        }
+        } /*else if (value == 'share') {
+          if (currentSong != null) {
+            final effectiveSong = ref.read(effectiveCurrentSongProvider);
+            shareSong(
+              context,
+              id: currentSong['id']?.toString() ?? '',
+              title:
+                  (effectiveSong?['title'] ?? currentSong['title'])
+                      ?.toString() ??
+                  '',
+              artist:
+                  (effectiveSong?['author'] ?? currentSong['author'])
+                      ?.toString() ??
+                  '',
+            );
+          }
+        }*/
       },
       itemBuilder: (context) => [
         if (isLocal)
@@ -123,7 +147,6 @@ class PlayerScreen extends ConsumerWidget {
               ],
             ),
           ),
-
         const PopupMenuItem(
           value: 'playlist',
           child: Row(
@@ -137,6 +160,11 @@ class PlayerScreen extends ConsumerWidget {
             ],
           ),
         ),
+        /*if (isLocal)
+          const PopupMenuItem(
+            value: 'share',
+            child: Text('Compartir', style: TextStyle(color: Colors.white)),
+          ),*/
       ],
     );
   }

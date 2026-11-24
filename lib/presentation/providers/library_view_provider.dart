@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'library_filter_provider.dart';
 import 'custom_artwork_provider.dart';
 import 'local_music_provider.dart';
 import 'player_provider.dart';
@@ -83,12 +84,19 @@ final sortedLibraryProvider = Provider<AsyncValue<LibraryView>>((ref) {
   final songsAsync = ref.watch(localSongsProvider);
   final metadata = ref.watch(customSongMetadataProvider);
   final sort = ref.watch(sortOptionProvider);
-  final plays =
-      sort == 'plays' ? ref.watch(playCountProvider) : const <String, int>{};
+  final filter = ref.watch(libraryFilterProvider);
+  final plays = sort == 'plays'
+      ? ref.watch(playCountProvider)
+      : const <String, int>{};
 
-  return songsAsync.whenData((songs) {
+  final AsyncValue<List<Map<String, dynamic>>> source = songsAsync.hasValue
+      ? AsyncData(songsAsync.value!)
+      : songsAsync;
+
+  return source.whenData((songs) {
     final entries = <_Entry>[];
     for (final song in songs) {
+      if (isHiddenSong(song, filter)) continue;
       final id = song['id']?.toString() ?? '';
       final meta = metadata[id];
 
@@ -99,7 +107,8 @@ final sortedLibraryProvider = Provider<AsyncValue<LibraryView>>((ref) {
           ? meta!.artist
           : (song['artist']?.toString() ?? song['author']?.toString() ?? '');
 
-      final date = int.tryParse(
+      final date =
+          int.tryParse(
             song['date']?.toString() ?? song['id']?.toString() ?? '0',
           ) ??
           0;
@@ -123,8 +132,9 @@ final sortedLibraryProvider = Provider<AsyncValue<LibraryView>>((ref) {
   });
 });
 
-final filteredSongsProvider =
-    Provider<AsyncValue<List<Map<String, dynamic>>>>((ref) {
+final filteredSongsProvider = Provider<AsyncValue<List<Map<String, dynamic>>>>((
+  ref,
+) {
   final view = ref.watch(sortedLibraryProvider);
   final tokens = normalizeSearch(ref.watch(librarySearchQueryProvider))
       .split(RegExp(r'\s+'))

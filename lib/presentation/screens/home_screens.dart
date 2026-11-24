@@ -8,18 +8,17 @@ import 'package:mymusicproject/presentation/widgets/home/home_mini_player.dart';
 import 'package:mymusicproject/presentation/widgets/home/song_sort_sheet.dart';
 import 'package:mymusicproject/presentation/widgets/home/home_action.dart';
 import 'package:mymusicproject/presentation/widgets/home/song_list.dart';
+import 'package:mymusicproject/presentation/providers/library_refresh_provider.dart';
 
 import 'player_screen.dart';
-import 'package:mymusicproject/presentation/widgets/error_view.dart';
 
+import 'package:mymusicproject/presentation/widgets/error_view.dart';
 import 'package:mymusicproject/presentation/widgets/player/sleep_timer_sheet.dart';
 import 'package:mymusicproject/presentation/screens/favorites_screen.dart';
 import 'package:mymusicproject/presentation/providers/local_music_provider.dart';
 import 'package:mymusicproject/presentation/providers/custom_artwork_provider.dart';
-
 import 'package:mymusicproject/presentation/screens/settings_screen.dart';
 import 'package:mymusicproject/presentation/widgets/app_scaffold.dart';
-
 import 'package:mymusicproject/presentation/providers/library_view_provider.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -166,11 +165,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       style: TextStyle(fontSize: 12),
                     ),
                     onPressed: () {
-                      ref.read(localSongsProvider).whenData((songs) {
+                      ref.read(sortedLibraryProvider).whenData((view) {
                         _homeAction.playRandomSong(
                           ref: ref,
                           context: context,
-                          songs: List<Map<String, dynamic>>.from(songs),
+                          songs: List<Map<String, dynamic>>.from(view.songs),
                         );
                       });
                     },
@@ -209,16 +208,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   return ref
                       .watch(filteredSongsProvider)
                       .when(
-                        data: (songs) => SongList(
-                          songs: songs,
-                          onSongTap: (song) async {
-                            await _homeAction.playSongAndNavigate(
-                              ref: ref,
-                              context: context,
-                              song: song,
-                              queue: songs,
-                            );
-                          },
+                        data: (songs) => RefreshIndicator(
+                          onRefresh: () =>
+                              ref.read(libraryRefresherProvider).refresh(),
+                          child: SongList(
+                            songs: songs,
+                            onSongTap: (song) async {
+                              await _homeAction.playSongAndNavigate(
+                                ref: ref,
+                                context: context,
+                                song: song,
+                                queue: songs,
+                              );
+                            },
+                          ),
                         ),
                         loading: () =>
                             const Center(child: CircularProgressIndicator()),

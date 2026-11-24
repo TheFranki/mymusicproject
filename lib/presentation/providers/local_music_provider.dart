@@ -11,7 +11,40 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'player_provider.dart';
 import 'player_controller.dart';
 
-final sortOptionProvider = StateProvider<String>((ref) => 'name_asc');
+const _kSortKey = 'sort_option';
+
+class SortOptionController extends StateController<String> {
+  SortOptionController(super.state);
+  static Future<String> loadSaved() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      const valid = {
+        'name_asc',
+        'name_desc',
+        'author_asc',
+        'author_desc',
+        'date',
+        'plays',
+      };
+      final v = p.getString(_kSortKey);
+      return (v != null && valid.contains(v)) ? v : 'name_asc';
+    } catch (_) {
+      return 'name_asc';
+    }
+  }
+
+  @override
+  set state(String value) {
+    super.state = value;
+    SharedPreferences.getInstance()
+        .then((p) => p.setString(_kSortKey, value))
+        .catchError((_) => false);
+  }
+}
+
+final sortOptionProvider = StateNotifierProvider<SortOptionController, String>(
+  (ref) => SortOptionController('name_asc'),
+);
 
 final playCountProvider =
     StateNotifierProvider<PlayCountNotifier, Map<String, int>>((ref) {

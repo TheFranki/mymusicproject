@@ -29,6 +29,8 @@ class PlayerService {
   ConcatenatingAudioSource? _concat;
   Future<void> _preloadChain = Future.value();
 
+  int _publishSeq = 0;
+
   Future<void> publishMediaItem({
     required String id,
     required String title,
@@ -36,13 +38,16 @@ class PlayerService {
     String? thumbnailUrl,
     Duration? duration,
   }) async {
+    final seq = ++_publishSeq;
+    final art = await resolveNotificationArt(thumbnailUrl);
+    if (seq != _publishSeq) return;
     handler.mediaItem.add(
       MediaItem(
         id: id,
         title: title,
         artist: author,
         duration: duration,
-        artUri: await resolveNotificationArt(thumbnailUrl),
+        artUri: art,
       ),
     );
   }
@@ -132,12 +137,18 @@ class PlayerService {
     String? thumbnailUrl,
     bool Function()? isStale,
   }) async {
+    final seq = ++_publishSeq;
     final art = await resolveNotificationArt(thumbnailUrl);
-    if (isStale?.call() ?? false) return;
+    if (seq != _publishSeq || (isStale?.call() ?? false)) return;
     final current = handler.mediaItem.value;
-    if (current == null || current.id != id) return;
     handler.mediaItem.add(
-      current.copyWith(title: title, artist: author, artUri: art),
+      MediaItem(
+        id: id,
+        title: title,
+        artist: author,
+        artUri: art,
+        duration: current?.id == id ? current?.duration : player.duration,
+      ),
     );
   }
 
